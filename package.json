@@ -1,0 +1,47 @@
+{
+  "name": "paymock",
+  "version": "1.0.0",
+  "description": "Multi-tenant Monobank Acquiring Mock on Cloudflare Workers & D1",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "next dev -p 8787",
+    "build": "next build && opennextjs-cloudflare build --skipBuild",
+    "start": "next start -p 8787",
+    "dev:worker": "wrangler dev",
+    "deploy": "pnpm run build && wrangler deploy",
+    "db:init:local": "wrangler d1 execute paymock-db --local --file=./schema.sql",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types tests/api.test.ts"
+  },
+  "dependencies": {
+    "@clerk/backend": "^3.23.1",
+    "@clerk/nextjs": "^7.9.14",
+    "@hono/clerk-auth": "^3.1.1",
+    "autoprefixer": "^10.6.1",
+    "better-sqlite3": "^13.0.3",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "hono": "^4.7.4",
+    "lucide-react": "^1.54.0",
+    "marked": "^18.1.0",
+    "next": "15.1.7",
+    "postcss": "^8.5.29",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "tailwind-merge": "^3.7.0",
+    "tailwindcss": "^3.4.19",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250224.0",
+    "@opennextjs/cloudflare": "^1.20.10",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/marked": "^6.0.0",
+    "@types/node": "26.6.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "typescript": "^5.8.2",
+    "wrangler": "^3.114.0"
+  }
+}

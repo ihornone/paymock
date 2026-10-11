@@ -1,0 +1,21 @@
+name = "paymock"
+main = ".open-next/worker.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = ".open-next/assets"
+binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "paymock-db"
+database_id = "29ae1343-80a1-46ff-a3c6-b521dcfb9e5a"
+
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+[vars]
+NEXT_PUBLIC_APP_URL = "https://paymock.ihornone.site"
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY = "pk_test_c3dlZXBpbmctaGVycmluZy00OTIuY2xlcmsuYWNjb3VudHMuZGV2JA"
