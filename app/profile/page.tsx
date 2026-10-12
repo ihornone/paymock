@@ -198,12 +198,12 @@ function ProfileContent() {
 
 export default function ProfilePage() {
   return (
-    <DashboardProvider>
-      <Suspense fallback={<div className="p-8 text-center text-xs text-muted-foreground">Завантаження профілю...</div>}>
+    <Suspense fallback={<div className="p-8 text-center text-xs text-muted-foreground">Завантаження профілю...</div>}>
+      <DashboardProvider>
         <DashboardShell pageTitle="Профіль та API токени">
           <ProfileContent />
         </DashboardShell>
-      </Suspense>
-    </DashboardProvider>
+      </DashboardProvider>
+    </Suspense>
   );
 }
