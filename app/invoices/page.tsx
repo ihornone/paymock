@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { formatCurrencyAmount } from '@/lib/utils';
 import { ExternalLink, Receipt, Filter } from 'lucide-react';
-import type { InvoiceStatus } from '@/src/types/monobank';
+import type { InvoiceStatus } from '@/src/types/acquiring';
 
 function InvoicesContent() {
   const { invoices, selectedProject } = useDashboard();

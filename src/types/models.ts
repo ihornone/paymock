@@ -1,7 +1,8 @@
-import type { InvoiceStatus, PaymentType } from './monobank';
+import type { InvoiceStatus, PaymentType } from './acquiring';
 
 export interface Project {
   id: string;
+  user_id?: string | null;
   name: string;
   token: string;
   edrpou: string;
@@ -61,7 +62,9 @@ export interface InvoiceStats {
 
 export interface CreateProjectDTO {
   name: string;
+  userId?: string | null;
   edrpou?: string;
+  logoUrl?: string | null;
   defaultWebhookUrl?: string;
   defaultSuccessUrl?: string;
   defaultFailUrl?: string;

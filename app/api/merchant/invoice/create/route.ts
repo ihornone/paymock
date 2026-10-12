@@ -4,7 +4,7 @@ import { InvoicesRepository } from '@/lib/db/invoices.repository';
 import { ProjectsRepository } from '@/lib/db/projects.repository';
 import { generateInvoiceId } from '@/src/shared/utils/id';
 import { logger } from '@/src/shared/logger';
-import type { CreateInvoiceRequest } from '@/src/types/monobank';
+import type { CreateInvoiceRequest } from '@/src/types/acquiring';
 
 export async function POST(req: NextRequest) {
   const auth = await validateMerchantToken(req);

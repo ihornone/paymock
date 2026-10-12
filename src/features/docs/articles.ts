@@ -704,17 +704,293 @@ Content-Type: application/json
 \`\`\`
 </details>
 
-<details>
-<summary><span class="text-rose-400 font-mono font-semibold mr-2">500 INTERNAL_ERROR</span> Внутрішня помилка сервера</summary>
+    <details>
+    <summary><span class="text-rose-400 font-mono font-semibold mr-2">500 INTERNAL_ERROR</span> Внутрішня помилка сервера</summary>
 
-Виникає при неочікуваних помилках виконання.
+    Виникає при неочікуваних помилках виконання.
+
+    \`\`\`json
+    {
+      "errCode": "INTERNAL_ERROR",
+      "errText": "unexpected error occurred"
+    }
+    \`\`\`
+    </details>`
+  },
+
+  'mcp': {
+    slug: 'mcp',
+    title: 'Paymock MCP Server (AI Асистент)',
+    category: 'Швидкий старт',
+    badge: 'AI / MCP',
+    badgeColor: 'blue',
+    content: `# Paymock MCP Server (AI Асистент)
+
+Хмарний сервер протоколу **Model Context Protocol (MCP)** підключає платіжне середовище Paymock безпосередньо до AI-асистентів у **Cursor IDE**, **Claude Desktop**, **Windsurf**, **ZCode** або **Zed**.
+
+Сервер працює у **глобальному режимі акаунта (Account-Level Scope)**: AI не обмежений одним статичним проєктом, а може **самостійно створювати нові проєкти під ваші мікросервіси чи боти**, генерувати рахунки та тестувати вебхуки на льоту!
+
+---
+
+## Швидке підключення
+
+Оскільки Paymock функціонує як віддалений хмарний сервіс, вам **не потрібно встановлювати локальні пакети чи вказувати шляхи до файлів**. Підключення виконується через URL з використанням вашого токена з кабінету.
+
+### 1. Cursor IDE (\`.cursor/mcp.json\`)
+
+Створіть або відредагуйте файл \`.cursor/mcp.json\` у корені вашого проєкту:
 
 \`\`\`json
 {
-  "errCode": "INTERNAL_ERROR",
-  "errText": "unexpected error occurred"
+  "mcpServers": {
+    "paymock": {
+      "url": "{{BASE_URL}}/api/mcp",
+      "headers": {
+        "X-Token": "pmk_live_ваш_токен_з_налаштувань"
+      }
+    }
+  }
 }
 \`\`\`
-</details>`
+
+### 2. Claude Desktop / Windsurf (\`claude_desktop_config.json\`)
+
+Додайте конфігурацію сервера до файлу налаштувань:
+
+\`\`\`json
+{
+  "mcpServers": {
+    "paymock": {
+      "url": "{{BASE_URL}}/api/mcp",
+      "headers": {
+        "X-Token": "pmk_live_ваш_токен_з_налаштувань"
+      }
+    }
+  }
+}
+\`\`\`
+
+> 💡 **Розумна авторизація:** Достатньо вказати токен будь-якого вашого проєкту. Сервер автоматично зв'яже його з вашим акаунтом, надавши асистенту права на перегляд усіх ваших проєктів та створення нових.
+
+---
+
+## Специфікація HTTP Ендпоінта
+
+MCP-клієнти взаємодіють із сервером за стандартом JSON-RPC 2.0:
+
+### Запит
+
+\`\`\`http
+POST /api/mcp HTTP/1.1
+Host: {{HOST}}
+X-Token: pmk_live_xxxxxxxxxxxx
+Content-Type: application/json
+
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/list",
+  "params": {}
+}
+\`\`\`
+
+### Відповідь
+
+\`\`\`json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "tools": [
+      { "name": "list_projects", "description": "Отримати перелік усіх проєктів..." },
+      { "name": "create_project", "description": "Створити новий мерчант-проєкт..." },
+      { "name": "create_invoice", "description": "Створити рахунок на оплату..." },
+      { "name": "simulate_payment", "description": "Симулювати проведення оплати..." },
+      { "name": "get_webhook_logs", "description": "Журнал доставки вебхуків..." }
+    ]
+  }
+}
+\`\`\`
+
+---
+
+## Інструменти керування проєктами (Projects)
+
+<details>
+<summary><span class="text-blue-400 font-mono font-semibold mr-2">TOOL</span> list_projects — Список усіх проєктів</summary>
+
+Повертає перелік усіх проєктів вашого акаунта із назвами, ID, налаштуваннями дефолтних вебхуків та активними \`X-Token\`.
+
+**Параметри:** Не потребує вхідних параметрів.
+
+\`\`\`json
+[
+  {
+    "id": "prj_88bdf21a0",
+    "name": "Інтернет-магазин одягу",
+    "token": "pmk_live_a89f928e01b3",
+    "defaultWebhookUrl": "https://myshop.com/api/payment/webhook",
+    "createdAt": "2026-10-10T12:00:00Z"
+  }
+]
+\`\`\`
+</details>
+
+<details>
+<summary><span class="text-emerald-400 font-mono font-semibold mr-2">TOOL</span> create_project — Створення нового проєкту</summary>
+
+Дозволяє асистенту автоматично зареєструвати новий проєкт (наприклад, коли ви розробляєте новий сервіс, бот чи модуль), згенерувати для нього секретний ключ та підготувати змінні для вашого \`.env\`.
+
+**Параметри:**
+- \`name\` (*string*, обов'язковий) — назва проєкту (наприклад, \`Telegram Бот Підписок\`).
+- \`defaultWebhookUrl\` (*string*, опціонально) — URL бекенду для вебхуків за замовчуванням.
+- \`defaultSuccessUrl\` (*string*, опціонально) — адреса перенаправлення після оплати.
+- \`edrpou\` (*string*, опціонально) — код ЄДРПОУ компанії.
+
+\`\`\`json
+{
+  "message": "✅ Проєкт \\"Telegram Бот\\" успішно створено!",
+  "project": {
+    "id": "prj_91e0fa23",
+    "name": "Telegram Бот",
+    "token": "pmk_live_83ba91ef3802",
+    "defaultWebhookUrl": "http://localhost:3000/api/bot-webhook"
+  },
+  "envExample": "PAYMOCK_PROJECT_ID=prj_91e0fa23\\nPAYMOCK_TOKEN=pmk_live_83ba91ef3802"
+}
+\`\`\`
+</details>
+
+<details>
+<summary><span class="text-blue-400 font-mono font-semibold mr-2">TOOL</span> get_project — Інформація про проєкт</summary>
+
+Отримує повну конфігурацію вказаного або поточного проєкту.
+
+**Параметри:**
+- \`projectId\` (*string*, опціонально) — ID проєкту. Якщо не вказано, повертається поточний активний проєкт.
+</details>
+
+<details>
+<summary><span class="text-amber-400 font-mono font-semibold mr-2">TOOL</span> reset_project_token — Оновлення X-Token</summary>
+
+Генерує новий секретний авторизаційний токен для проєкту замість старого або скомпрометованого.
+
+**Параметри:**
+- \`projectId\` (*string*, обов'язковий) — ID проєкту для оновлення токена.
+</details>
+
+---
+
+## Інструменти платежів та тестування (Invoices)
+
+<details>
+<summary><span class="text-blue-400 font-mono font-semibold mr-2">TOOL</span> create_invoice — Створення рахунку</summary>
+
+Створює новий платіжний рахунок та повертає готові посилання на сторінку чекауту (\`pageUrl\`) і мобільний додаток (\`appUrl\`).
+
+**Параметри:**
+- \`projectId\` (*string*, опціонально) — ID проєкту, для якого створюється рахунок. Якщо не вказано, використовується проєкт за замовчуванням.
+- \`amount\` (*number*, обов'язковий) — сума в копійках (наприклад, \`15000\` для 150.00 ₴).
+- \`destination\` (*string*, обов'язковий) — призначення платежу.
+- \`comment\` (*string*, опціонально) — внутрішня примітка.
+- \`webHookUrl\` (*string*, опціонально) — адреса вашого бекенду для отримання статусу.
+- \`redirectUrl\` (*string*, опціонально) — адреса повернення покупця після оплати.
+
+\`\`\`json
+{
+  "invoiceId": "p2_Lo7hOQmSTN",
+  "status": "created",
+  "amount": 15000,
+  "pageUrl": "{{BASE_URL}}/pay/p2_Lo7hOQmSTN",
+  "appUrl": "paymock://pay?invoiceId=p2_Lo7hOQmSTN",
+  "projectId": "prj_88bdf21a0",
+  "projectName": "Інтернет-магазин"
+}
+\`\`\`
+</details>
+
+<details>
+<summary><span class="text-emerald-400 font-mono font-semibold mr-2">TOOL</span> simulate_payment — Симуляція оплати та Webhook</summary>
+
+Програмно змінює статус рахунку без необхідності відкривати браузер і відправляє реальний HTTP-вебхук на вказаний \`webHookUrl\` вашого сайту.
+
+**Параметри:**
+- \`invoiceId\` (*string*, обов'язковий) — ідентифікатор рахунку.
+- \`action\` (*string*, обов'язковий) — дія: \`success\`, \`failure\` або \`expired\`.
+- \`failureReason\` (*string*, опціонально) — причина відхилення (наприклад, "Недостатньо коштів").
+
+\`\`\`text
+✅ Статус рахунку p2_Lo7hOQmSTN оновлено на [success].
+Webhook: надіслано на https://myshop.com/api/webhook (HTTP 200, 48ms).
+\`\`\`
+</details>
+
+<details>
+<summary><span class="text-blue-400 font-mono font-semibold mr-2">TOOL</span> get_webhook_logs — Моніторинг відповідей бекенду</summary>
+
+Повертає журнал відправлених вебхуків із кодами відповідей вашого сервера (HTTP 200, 500 тощо), тривалістю виконання у мілісекундах та отриманим тілом відповіді.
+
+**Параметри:**
+- \`projectId\` (*string*, опціонально) — фільтрація за проєктом.
+- \`invoiceId\` (*string*, опціонально) — фільтр за конкретним рахунком.
+- \`limit\` (*number*, дефолт 15) — кількість останніх записів.
+</details>
+
+<details>
+<summary><span class="text-blue-400 font-mono font-semibold mr-2">TOOL</span> get_invoice — Деталі рахунку</summary>
+
+Отримує повну інформацію про рахунок за його \`invoiceId\` (статус, сума, реквізити картки покупця, час створення та модифікації).
+
+**Параметри:**
+- \`invoiceId\` (*string*, обов'язковий) — ідентифікатор рахунку.
+</details>
+
+<details>
+<summary><span class="text-blue-400 font-mono font-semibold mr-2">TOOL</span> list_invoices — Реєстр транзакцій</summary>
+
+Повертає перелік рахунків проєкту з фільтрацією за статусами (\`created\`, \`success\`, \`failure\`, \`reversed\`, \`expired\` або \`all\`).
+
+**Параметри:**
+- \`projectId\` (*string*, опціонально) — фільтр за проєктом.
+- \`status\` (*string*, опціонально) — статус фільтрації.
+- \`limit\` (*number*, дефолт 20) — ліміт кількості записів.
+</details>
+
+<details>
+<summary><span class="text-amber-400 font-mono font-semibold mr-2">TOOL</span> retry_webhook — Повторна відправка сповіщення</summary>
+
+Виконує повторну спробу доставки вебхука для перевірки реакції виправленого локального бекенду.
+
+**Параметри:**
+- \`invoiceId\` (*string*, обов'язковий) — ідентифікатор рахунку.
+- \`customUrl\` (*string*, опціонально) — альтернативна URL-адреса для тестування.
+</details>
+
+---
+
+## Контекстні ресурси (Resources)
+
+AI може автоматично підтягувати контекст вашого проєкту через спеціальні URI схеми:
+
+| URI Ресурсу | Опис | Формат |
+| :--- | :--- | :--- |
+| \`paymock://projects\` | Перелік усіх доступних проєктів користувача | \`application/json\` |
+| \`paymock://projects/{id}/stats\` | Фінансові підсумки та лічильники статусів | \`application/json\` |
+| \`paymock://projects/{id}/invoices/recent\` | 10 останніх створених рахунків | \`application/json\` |
+
+---
+
+## Приклади запитів до AI-асистента
+
+Завдяки глобальному підключенню ви можете віддавати асистенту комплексні задачі в звичайному чаті:
+
+> **Створення окремого проєкту під новий модуль:**  
+> *"Створи в Paymock новий проєкт 'Мобільний додаток' з вебхуком на \`http://localhost:8080/api/hook\` і запиши отриманий токен у мій .env.local."*
+
+> **Автоматизований E2E тест з перевіркою реакції:**  
+> *"Створи рахунок на 500 грн у проєкті 'Мобільний додаток', виклич simulate_payment з дією success і перевір у get_webhook_logs, чи повернув мій сервер 200 OK."*
+
+> **Швидкий моніторинг помилок:**  
+> *"Покажи останні 5 невдалих вебхуків з get_webhook_logs, щоб я бачив, де саме падає мій обробник."*`
   }
 };

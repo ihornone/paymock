@@ -46,7 +46,7 @@ async function runTests() {
   const createdInvoice = await resCreate.json() as { invoiceId: string; pageUrl: string; appUrl: string };
   assert.ok(createdInvoice.invoiceId.startsWith('p2_'), 'invoiceId should start with p2_');
   assert.ok(createdInvoice.pageUrl.includes(createdInvoice.invoiceId), 'pageUrl should contain invoiceId');
-  assert.ok(createdInvoice.appUrl.includes('monobank://'), 'appUrl should contain monobank scheme');
+  assert.ok(createdInvoice.appUrl.includes('paymock://'), 'appUrl should contain paymock scheme');
   console.log(`✅ Invoice ${createdInvoice.invoiceId} created successfully.`);
 
   // 3. Status Verification (Initial 'created')
@@ -118,7 +118,7 @@ async function runTests() {
 
   // 7. Multi-project Management Test
   console.log('\n[Test 7] Testing multi-project creation and tenant isolation...');
-  const resNewProject = await fetch(`${BASE_URL}/admin/api/projects`, {
+  const resNewProject = await fetch(`${BASE_URL}/api/admin/projects`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -142,6 +142,147 @@ async function runTests() {
   const customDetails = await resCustomDetails.json() as { merchantName: string };
   assert.strictEqual(customDetails.merchantName, 'E2E Тестовий Магазин');
   console.log('✅ Multi-project isolation and custom tokens verified.');
+
+  // [Test 8] Global MCP Server (Account-Scoped Tools)
+  console.log('\n[Test 8] Testing Global MCP Server (create_project, list_projects, create_invoice)...');
+  
+  // 8.1 List MCP Tools
+  const resMcpTools = await fetch(`${BASE_URL}/api/mcp`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Token': newProjectData.project.token,
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/list',
+      params: {},
+    }),
+  });
+  assert.strictEqual(resMcpTools.status, 200);
+  const mcpToolsData = await resMcpTools.json() as {
+    result: { tools: Array<{ name: string }> };
+  };
+  const toolNames = mcpToolsData.result.tools.map((t) => t.name);
+  assert.ok(toolNames.includes('create_project'));
+  assert.ok(toolNames.includes('list_projects'));
+  assert.ok(toolNames.includes('get_project'));
+  assert.ok(toolNames.includes('reset_project_token'));
+  assert.ok(toolNames.includes('create_invoice'));
+
+  // 8.2 Create a project via MCP AI Tool
+  const resCreateProjectMcp = await fetch(`${BASE_URL}/api/mcp`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Token': newProjectData.project.token,
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'tools/call',
+      params: {
+        name: 'create_project',
+        arguments: {
+          name: 'AI Автоматичний Магазин',
+          defaultWebhookUrl: 'https://test-shop.org/api/mcp-webhook',
+        },
+      },
+    }),
+  });
+  assert.strictEqual(resCreateProjectMcp.status, 200);
+  const createProjectResult = await resCreateProjectMcp.json() as {
+    result: { content: Array<{ text: string }> };
+  };
+  const createdProjectParsed = JSON.parse(createProjectResult.result.content[0].text);
+  assert.ok(createdProjectParsed.project.id);
+  assert.ok(createdProjectParsed.project.token.startsWith('pmk_live_'));
+  assert.strictEqual(createdProjectParsed.project.name, 'AI Автоматичний Магазин');
+
+  const mcpProjectId = createdProjectParsed.project.id;
+
+  // 8.3 Create Invoice in the newly created project via MCP
+  const resCreateInvoiceMcp = await fetch(`${BASE_URL}/api/mcp`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Token': newProjectData.project.token,
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 3,
+      method: 'tools/call',
+      params: {
+        name: 'create_invoice',
+        arguments: {
+          projectId: mcpProjectId,
+          amount: 5500,
+          destination: 'Замовлення через Global MCP',
+        },
+      },
+    }),
+  });
+  assert.strictEqual(resCreateInvoiceMcp.status, 200);
+  const createInvoiceResult = await resCreateInvoiceMcp.json() as {
+    result: { content: Array<{ text: string }> };
+  };
+  const createdInvoiceParsed = JSON.parse(createInvoiceResult.result.content[0].text);
+  assert.strictEqual(createdInvoiceParsed.projectId, mcpProjectId);
+  assert.strictEqual(createdInvoiceParsed.amount, 5500);
+  assert.ok(createdInvoiceParsed.pageUrl.includes(createdInvoiceParsed.invoiceId));
+
+  // 8.4 Simulate payment via MCP
+  const resSimulateMcp = await fetch(`${BASE_URL}/api/mcp`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Token': newProjectData.project.token,
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 4,
+      method: 'tools/call',
+      params: {
+        name: 'simulate_payment',
+        arguments: {
+          invoiceId: createdInvoiceParsed.invoiceId,
+          action: 'success',
+        },
+      },
+    }),
+  });
+  assert.strictEqual(resSimulateMcp.status, 200);
+  const simulateMcpResult = (await resSimulateMcp.json()) as {
+    result: { content: Array<{ text: string }> };
+  };
+  assert.ok(simulateMcpResult.result.content[0].text.includes('[success]'));
+
+  // 8.5 Reset Project Token via MCP
+  const resResetTokenMcp = await fetch(`${BASE_URL}/api/mcp`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Token': newProjectData.project.token,
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 5,
+      method: 'tools/call',
+      params: {
+        name: 'reset_project_token',
+        arguments: {
+          projectId: mcpProjectId,
+        },
+      },
+    }),
+  });
+  assert.strictEqual(resResetTokenMcp.status, 200);
+  const resetTokenParsed = JSON.parse((await resResetTokenMcp.json() as any).result.content[0].text);
+  assert.ok(resetTokenParsed.newToken.startsWith('pmk_live_'));
+  assert.notStrictEqual(resetTokenParsed.newToken, createdProjectParsed.project.token);
+
+  console.log('✅ Global MCP Server verified: dynamic project creation, invoice generation & token reset.');
 
   console.log('\n🎉 ALL PAYMOCK E2E VERIFICATION TESTS PASSED SUCCESSFULLY! 🚀');
 }

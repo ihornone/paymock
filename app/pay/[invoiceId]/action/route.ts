@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { InvoicesRepository } from '@/lib/db/invoices.repository';
 import { sendWebhook } from '@/lib/webhook';
 import { logger } from '@/src/shared/logger';
-import type { InvoiceStatus } from '@/src/types/monobank';
+import type { InvoiceStatus } from '@/src/types/acquiring';
 
 export async function POST(
   req: NextRequest,
@@ -86,6 +86,7 @@ export async function POST(
   });
 
   return NextResponse.json({
+    ok: true,
     success: true,
     status: newStatus,
     redirectUrl: targetRedirectUrl,

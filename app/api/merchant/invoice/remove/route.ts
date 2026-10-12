@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { validateMerchantToken } from '@/lib/auth';
 import { InvoicesRepository } from '@/lib/db/invoices.repository';
-import type { RemoveInvoiceRequest, RemoveInvoiceResponse } from '@/src/types/monobank';
+import type { RemoveInvoiceRequest, RemoveInvoiceResponse } from '@/src/types/acquiring';
 
 export async function POST(req: NextRequest) {
   const auth = await validateMerchantToken(req);

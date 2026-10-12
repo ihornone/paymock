@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ProjectsRepository } from '@/lib/db/projects.repository';
+import { getRequestUserId } from '@/lib/auth-user';
 
 export async function POST(req: NextRequest) {
   let body: { projectId: string };
@@ -13,11 +14,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Missing projectId' }, { status: 400 });
   }
 
+  const userId = getRequestUserId(req);
   const projectsRepo = new ProjectsRepository();
-  const updatedProject = await projectsRepo.resetToken(body.projectId);
+  const updatedProject = await projectsRepo.resetToken(body.projectId, userId || null);
 
   if (!updatedProject) {
-    return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+    return NextResponse.json({ error: 'Project not found or unauthorized' }, { status: 404 });
   }
 
   return NextResponse.json({

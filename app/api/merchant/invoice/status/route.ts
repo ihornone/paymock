@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { validateMerchantToken } from '@/lib/auth';
 import { InvoicesRepository } from '@/lib/db/invoices.repository';
 import { logger } from '@/src/shared/logger';
-import type { InvoiceStatusResponse } from '@/src/types/monobank';
+import type { InvoiceStatusResponse } from '@/src/types/acquiring';
 
 export async function GET(req: NextRequest) {
   const auth = await validateMerchantToken(req);

@@ -17,7 +17,7 @@ export function DocsShell({ slug, categories, children }: DocsShellProps) {
   return (
     <div className="flex min-h-screen bg-background text-foreground">
       {/* ==================== DESKTOP SIDEBAR ==================== */}
-      <aside className="hidden md:flex sticky top-0 h-screen w-64 shrink-0 flex-col border-r border-border bg-card">
+      <aside className="hidden md:flex sticky top-0 h-screen w-72 shrink-0 flex-col border-r border-border bg-card">
         <div className="flex h-14 shrink-0 items-center justify-between border-b border-border px-4">
           <Link href="/" className="flex items-center gap-2 text-sm font-semibold tracking-tight hover:opacity-80">
             <ArrowLeft className="h-4 w-4 text-muted-foreground" />
@@ -86,7 +86,7 @@ export function DocsShell({ slug, categories, children }: DocsShellProps) {
             onClick={() => setIsMobileOpen(false)}
             aria-hidden="true"
           />
-          <div className="relative z-50 flex h-full w-[280px] max-w-[85vw] flex-col bg-card border-r border-border shadow-2xl">
+          <div className="relative z-50 flex h-full w-[310px] max-w-[85vw] flex-col bg-card border-r border-border shadow-2xl">
             <div className="flex h-14 shrink-0 items-center justify-between border-b border-border px-4">
               <Link
                 href="/"

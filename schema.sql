@@ -3,6 +3,7 @@
 -- 1. Таблиця проєктів (Мерчантів)
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY,
+  user_id TEXT,
   name TEXT NOT NULL,
   token TEXT UNIQUE NOT NULL,
   edrpou TEXT NOT NULL DEFAULT '12345678',
@@ -56,6 +57,7 @@ CREATE TABLE IF NOT EXISTS webhook_logs (
 
 -- Індекси
 CREATE INDEX IF NOT EXISTS idx_projects_token ON projects(token);
+CREATE INDEX IF NOT EXISTS idx_projects_user_id ON projects(user_id);
 CREATE INDEX IF NOT EXISTS idx_invoices_project ON invoices(project_id);
 CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
 CREATE INDEX IF NOT EXISTS idx_webhook_logs_invoice ON webhook_logs(invoice_id);

@@ -10,6 +10,8 @@ import {
   Receipt,
   Building2,
   Activity,
+  Settings,
+  KeyRound,
   BookOpen,
   FileCode,
   Plus,
@@ -352,6 +354,13 @@ export function DashboardClient() {
                   </div>
                 </div>
               </div>
+              <Link
+                href={selectedProjectId ? `/profile?projectId=${selectedProjectId}` : '/profile'}
+                title="Профіль та API токени"
+                className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors shrink-0 ml-1.5"
+              >
+                <KeyRound className="h-4 w-4" />
+              </Link>
             </div>
           )}
         </div>
@@ -372,14 +381,7 @@ export function DashboardClient() {
             )}
           </div>
 
-          <div className="flex items-center gap-3">
-            {isUserAuthenticated && hasProjects && (
-              <Button size="sm" onClick={() => setIsCreateOpen(true)} className="h-8 gap-1.5 text-xs">
-                <Plus className="h-3.5 w-3.5" />
-                Створити проєкт
-              </Button>
-            )}
-          </div>
+          <div className="flex items-center gap-3" />
         </header>
 
         {/* Content Body */}

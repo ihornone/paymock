@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { formatCurrencyAmount } from '@/lib/utils';
 import type { InvoiceRecord, Project } from '@/src/types/models';
-import type { BasketItem } from '@/src/types/monobank';
+import type { BasketItem } from '@/src/types/acquiring';
 
 interface CheckoutClientProps {
   invoice: InvoiceRecord;

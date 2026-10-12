@@ -1,6 +1,6 @@
-# ⚡ Paymock — Multi-Tenant Monobank Acquiring Mock on Cloudflare
+# ⚡ Paymock — Multi-Tenant Acquiring Mock on Cloudflare
 
-**Paymock** — це автономний mock-сервіс еквайрингу з **100% сумісністю з офіційним API monobank Acquiring** (`api.monobank.ua`), створений для розробників, тестувальників та демонстрацій клієнтам без підключення до реального банку чи реєстрації ФОП.
+**Paymock** — це автономний mock-сервіс еквайрингу з **100% сумісністю з офіційним Acquiring API**, створений для розробників, тестувальників та демонстрацій клієнтам без підключення до реального банку чи реєстрації ФОП.
 
 Працює на **Cloudflare Workers** (edge runtime) з реляційною базою даних **Cloudflare D1** (Serverless SQLite).
 
@@ -8,7 +8,7 @@
 
 ## 🌟 Основні можливості
 
-- **Повна сумісність з monobank API:**
+- **Повна сумісність з Acquiring API:**
   - `GET /api/merchant/details` — перевірка токена та реквізитів мерчанта.
   - `POST /api/merchant/invoice/create` — створення інвойсу, розрахунок кошика, повернення `pageUrl` та `appUrl`.
   - `GET /api/merchant/invoice/status?invoiceId={id}` — перевірка актуального статусу рахунку.
@@ -19,9 +19,9 @@
   - Кожен проєкт має власний персональний `X-Token` (`pmk_live_...`).
   - Ізоляція транзакцій, аналітика обігу та статистика для кожного проєкту окремо.
 - **💳 Інтерактивна платіжна сторінка (`/pay/:invoiceId`):**
-  - Впізнаваний мінімалістичний темний UI у стилі monobank.
+  - Впізнаваний мінімалістичний темний UI.
   - Деталізація кошика товарів (`basketOrder`).
-  - Симуляція Apple Pay / Google Pay, Mono App та оплати банківською карткою.
+  - Симуляція Apple Pay / Google Pay та оплати банківською карткою.
   - **Sandbox Simulator Bar:** перемикання статусів в 1 клік (`Success`, `Failure`, `Processing 3s`, `Expired`).
 - **📡 Доставка та моніторинг Webhook:**
   - Реальна відправка HTTP POST запитів на `webHookUrl` вашого сайту при зміні статусу.
@@ -34,10 +34,9 @@
 ### 1. Встановлення залежностей
 ```bash
 pnpm install
-# або npm install
 ```
 
-### 2. Ініціалізація локальної бази Cloudflare D1
+### 2. Ініціалізація бази Cloudflare D1
 ```bash
 pnpm db:init:local
 ```
@@ -83,7 +82,7 @@ pnpm deploy
 ## 🔌 Інтеграція з вашим сайтом
 
 Для перемикання вашого сайту чи інтернет-магазину на Paymock потрібно лише:
-1. Замінити базовий URL з `https://api.monobank.ua` на адресу вашого Paymock:
+1. Замінити базовий URL на адресу вашого Paymock:
    - Локально: `http://localhost:8787`
    - На Cloudflare: `https://paymock.<your-subdomain>.workers.dev`
 2. Вказати `X-Token` потрібного проєкту з кабінету Paymock.
@@ -113,7 +112,7 @@ curl -X POST https://your-paymock.workers.dev/api/merchant/invoice/create \
       ]
     },
     "redirectUrl": "https://myshop.ua/order/1001",
-    "webHookUrl": "https://myshop.ua/api/mono/webhook",
+    "webHookUrl": "https://myshop.ua/api/payment/webhook",
     "withAppUrl": true
   }'
 ```
@@ -123,7 +122,7 @@ curl -X POST https://your-paymock.workers.dev/api/merchant/invoice/create \
 {
   "invoiceId": "p2_9ZgpZVsl3",
   "pageUrl": "https://your-paymock.workers.dev/pay/p2_9ZgpZVsl3",
-  "appUrl": "monobank://pay?invoiceId=p2_9ZgpZVsl3"
+  "appUrl": "paymock://pay?invoiceId=p2_9ZgpZVsl3"
 }
 ```
 
@@ -133,7 +132,7 @@ const response = await fetch('http://localhost:8787/api/merchant/invoice/create'
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
-    'X-Token': process.env.MONOBANK_TOKEN!,
+    'X-Token': process.env.PAYMOCK_TOKEN!,
   },
   body: JSON.stringify({
     amount: 15000, // 150.00 грн у копійках
@@ -152,8 +151,8 @@ const { pageUrl, invoiceId } = await response.json();
 #### 3. PHP / Laravel
 ```php
 $response = Http::withHeaders([
-    'X-Token' => config('services.monobank.token'),
-])->post(config('services.monobank.url') . '/api/merchant/invoice/create', [
+    'X-Token' => config('services.acquiring.token'),
+])->post(config('services.acquiring.url') . '/api/merchant/invoice/create', [
     'amount' => 50000,
     'ccy' => 980,
     'merchantPaymInfo' => [
@@ -201,11 +200,11 @@ paymock/
 └── src/
     ├── index.ts               # Головна точка входу додатку Hono
     ├── types/
-    │   ├── monobank.ts        # Типізація офіційного API monobank
+    │   ├── acquiring.ts       # Типізація офіційного Acquiring API
     │   ├── models.ts          # Моделі сутностей D1
     │   └── env.ts             # Cloudflare Bindings
     ├── shared/
-    │   ├── errors/            # Ієрархія помилок та мапінг monobank
+    │   ├── errors/            # Ієрархія помилок та мапінг відповідей
     │   ├── logger/            # Структурований JSON логер із маскуванням
     │   ├── utils/             # Генерація id інвойсів, токенів, форматування валют
     │   ├── middleware/        # Авторизація X-Token
@@ -217,8 +216,3 @@ paymock/
         ├── dashboard/         # Кабінет розробника (/, /dashboard, /admin)
         └── webhook/           # Фоновий диспетчер вебхуків
 ```
-
----
-
-## 📄 Ліцензія
-MIT License. Вільне використання для демо, тестування та комерційних проєктів.

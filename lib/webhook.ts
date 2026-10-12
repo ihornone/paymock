@@ -3,7 +3,7 @@ import { WebhooksRepository } from '@/lib/db/webhooks.repository';
 import { generateWebhookLogId } from '@/src/shared/utils/id';
 import { logger } from '@/src/shared/logger';
 import type { InvoiceRecord } from '@/src/types/models';
-import type { InvoiceStatusResponse } from '@/src/types/monobank';
+import type { InvoiceStatusResponse } from '@/src/types/acquiring';
 
 export async function sendWebhook(invoice: InvoiceRecord): Promise<void> {
   const webhooksRepo = new WebhooksRepository();

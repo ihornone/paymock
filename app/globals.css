@@ -54,3 +54,102 @@ body {
   color: hsl(var(--foreground));
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
+
+/* ==================== CUSTOM DARK SCROLLBAR ==================== */
+html {
+  color-scheme: dark;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(240 3.7% 25%) transparent;
+}
+
+/* WebKit (Chrome, Edge, Safari, Electron) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(240 3.7% 25%);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(240 3.7% 38%);
+}
+
+::-webkit-scrollbar-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ==================== CLERK THEME OVERRIDES ==================== */
+.cl-userButtonPopoverCard {
+  background-color: #121214 !important;
+  border: 1px solid #27272a !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5) !important;
+  color: #f4f4f5 !important;
+  border-radius: 0.75rem !important;
+}
+
+.cl-userButtonPopoverActionButton {
+  color: #f4f4f5 !important;
+  transition: background-color 0.15s ease, color 0.15s ease !important;
+}
+
+.cl-userButtonPopoverActionButton:hover {
+  background-color: #27272a !important;
+  color: #ffffff !important;
+}
+
+.cl-userButtonPopoverActionButtonText {
+  color: #f4f4f5 !important;
+  font-size: 0.8125rem !important;
+  font-weight: 500 !important;
+}
+
+.cl-userButtonPopoverActionButtonIcon {
+  color: #a1a1aa !important;
+}
+
+.cl-userButtonPopoverActionButton:hover .cl-userButtonPopoverActionButtonIcon {
+  color: #ffffff !important;
+}
+
+.cl-userPreviewMainIdentifier {
+  color: #f4f4f5 !important;
+  font-weight: 600 !important;
+  font-size: 0.8125rem !important;
+}
+
+.cl-userPreviewSecondaryIdentifier {
+  color: #a1a1aa !important;
+  font-size: 0.75rem !important;
+}
+
+.cl-userButtonPopoverFooter {
+  border-top: 1px solid #27272a !important;
+  background-color: #0e0e11 !important;
+}
+
+.cl-internal-ph31e8,
+.cl-footerAction,
+.cl-footer {
+  border-top-color: #27272a !important;
+}
+
+.cl-userButtonPopoverCard button {
+  color: #f4f4f5 !important;
+}
+

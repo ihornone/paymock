@@ -1,6 +1,6 @@
 import { getDb } from './db';
 import type { InvoiceRecord, InvoiceStats } from '@/src/types/models';
-import type { InvoiceStatus, PaymentInfo, CancelItem } from '@/src/types/monobank';
+import type { InvoiceStatus, PaymentInfo, CancelItem } from '@/src/types/acquiring';
 
 export interface CreateInvoiceDTO {
   id: string;

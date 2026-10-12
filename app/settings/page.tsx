@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ConfirmActionDialog } from '@/components/ui/confirm-dialog';
-import { Key, Copy, Check, RefreshCw, AlertTriangle, ShieldCheck, Trash2, Eye, EyeOff, Pencil, X } from 'lucide-react';
+import { Key, Copy, Check, RefreshCw, AlertTriangle, ShieldCheck, Trash2, Eye, EyeOff, Pencil, X, Sparkles, Bot, Code2 } from 'lucide-react';
 
 function SettingsContent() {
   const {
@@ -20,6 +20,7 @@ function SettingsContent() {
     handleDeleteProject,
     copyToClipboard,
     copiedKey,
+    user,
   } = useDashboard();
 
   const [isResetDialogOpen, setIsResetDialogOpen] = React.useState(false);
@@ -28,6 +29,7 @@ function SettingsContent() {
   const [isDeleting, setIsDeleting] = React.useState(false);
   const [resetSuccessMessage, setResetSuccessMessage] = React.useState<string | null>(null);
   const [showToken, setShowToken] = React.useState(false);
+  const [showAccountToken, setShowAccountToken] = React.useState(false);
 
   // Rename project state
   const [isEditingName, setIsEditingName] = React.useState(false);
@@ -93,7 +95,7 @@ function SettingsContent() {
   };
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6 max-w-5xl">
       <div>
         <h1 className="text-lg font-semibold tracking-tight text-foreground">Налаштування проєкту</h1>
       </div>

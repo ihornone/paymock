@@ -10,6 +10,7 @@ import {
   Building2,
   Activity,
   Settings,
+  KeyRound,
   BookOpen,
   FileCode,
   Plus,
@@ -127,7 +128,7 @@ export function DashboardShell({ children, pageTitle }: DashboardShellProps) {
   };
 
   const renderNavBody = () => {
-    if (!isLoaded || loading) {
+    if (!isLoaded || (loading && !hasProjects)) {
       /* Loading State */
       return (
         <div className="space-y-4">
@@ -346,6 +347,17 @@ export function DashboardShell({ children, pageTitle }: DashboardShellProps) {
             </div>
           </div>
         </div>
+        <Link
+          href="/profile"
+          title="Профіль та API токени"
+          className={`p-1.5 rounded-md transition-colors shrink-0 ml-1.5 ${
+            pathname === '/profile'
+              ? 'bg-accent text-accent-foreground'
+              : 'text-muted-foreground hover:text-foreground hover:bg-accent/60'
+          }`}
+        >
+          <KeyRound className="h-4 w-4" />
+        </Link>
       </div>
     );
   };
@@ -432,8 +444,14 @@ export function DashboardShell({ children, pageTitle }: DashboardShellProps) {
               <Menu className="h-5 w-5" />
             </button>
 
-            {!isUserAuthenticated || !hasProjects ? (
+            {!isUserAuthenticated || (!hasProjects && pathname !== '/profile') ? (
               <Skeleton className="h-4 w-32 sm:w-40" />
+            ) : pathname === '/profile' ? (
+              <div className="flex items-center text-xs font-medium text-muted-foreground truncate">
+                <span className="text-foreground font-semibold">Особистий кабінет</span>
+                <span className="mx-1.5 text-border">/</span>
+                <span className="text-primary font-medium">Профіль розробника та API токени</span>
+              </div>
             ) : (
               <div className="flex items-center text-xs font-medium text-muted-foreground truncate">
                 <span className="hidden sm:inline">Панель керування</span>
@@ -451,24 +469,24 @@ export function DashboardShell({ children, pageTitle }: DashboardShellProps) {
             )}
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            {isUserAuthenticated && hasProjects && (
-              <Button
-                size="sm"
-                onClick={() => setIsCreateOpen(true)}
-                className="h-8 px-2.5 sm:px-3 gap-1.5 text-xs cursor-pointer"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                <span className="hidden xs:inline sm:inline">Створити проєкт</span>
-                <span className="xs:hidden sm:hidden">Проєкт</span>
-              </Button>
-            )}
-          </div>
+          {/* Topbar Right Area (Cleaned up - redundant action removed) */}
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0" />
         </header>
 
         {/* Content Body */}
         <main className="flex flex-1 flex-col p-4 sm:p-6 space-y-6 max-w-full overflow-x-hidden">
-          {!isUserAuthenticated ? (
+          {!isLoaded || (loading && !hasProjects) ? (
+            <div className="space-y-4 animate-pulse p-2">
+              <Skeleton className="h-8 w-48" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <Skeleton className="h-24 w-full" />
+                <Skeleton className="h-24 w-full" />
+                <Skeleton className="h-24 w-full" />
+                <Skeleton className="h-24 w-full" />
+              </div>
+              <Skeleton className="h-64 w-full mt-4" />
+            </div>
+          ) : !isUserAuthenticated ? (
             /* Signed-out state */
             <div className="my-auto flex flex-col items-center justify-center p-6 sm:p-8 min-h-[60vh] text-center space-y-4">
               <h2 className="text-base font-semibold tracking-tight text-foreground">
@@ -482,7 +500,7 @@ export function DashboardShell({ children, pageTitle }: DashboardShellProps) {
                 </SignInButton>
               </div>
             </div>
-          ) : !hasProjects ? (
+          ) : !hasProjects && pathname !== '/profile' ? (
             /* 0 projects state */
             <div className="my-auto flex flex-col items-center justify-center p-6 sm:p-8 min-h-[60vh] text-center space-y-4">
               <div className="rounded-full bg-secondary p-4">

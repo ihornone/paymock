@@ -1,5 +1,5 @@
 export function generateInvoiceId(): string {
-  // monobank style: p2_... or base64/hex random string
+  // p2_... acquiring invoice ID
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let str = 'p2_';
   for (let i = 0; i < 10; i++) {
