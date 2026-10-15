@@ -89,6 +89,10 @@ export async function PATCH(req: NextRequest) {
   }
 
   const userId = getRequestUserId(req);
+  if (!userId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const projectsRepo = new ProjectsRepository();
   const updatedProject = await projectsRepo.update(
     body.id,
@@ -99,7 +103,7 @@ export async function PATCH(req: NextRequest) {
       default_success_url: body.default_success_url,
       default_fail_url: body.default_fail_url,
     },
-    userId || null
+    userId
   );
 
   if (!updatedProject) {
@@ -116,8 +120,12 @@ export async function DELETE(req: NextRequest) {
   }
 
   const userId = getRequestUserId(req);
+  if (!userId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const projectsRepo = new ProjectsRepository();
-  const deleted = await projectsRepo.delete(id, userId || null);
+  const deleted = await projectsRepo.delete(id, userId);
 
   if (!deleted) {
     return NextResponse.json({ error: 'Project not found or unauthorized' }, { status: 404 });

@@ -15,8 +15,12 @@ export async function POST(req: NextRequest) {
   }
 
   const userId = getRequestUserId(req);
+  if (!userId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const projectsRepo = new ProjectsRepository();
-  const updatedProject = await projectsRepo.resetToken(body.projectId, userId || null);
+  const updatedProject = await projectsRepo.resetToken(body.projectId, userId);
 
   if (!updatedProject) {
     return NextResponse.json({ error: 'Project not found or unauthorized' }, { status: 404 });

@@ -6,26 +6,18 @@ import Link from 'next/link';
 import { DashboardProvider, useDashboard } from '@/components/dashboard/dashboard-context';
 import { DashboardShell } from '@/components/dashboard/dashboard-shell';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { PageHeader } from '@/components/dashboard/page-header';
+import { CopyButton } from '@/components/ui/copy-button';
+import { SecretField } from '@/components/ui/secret-field';
 import {
   KeyRound,
   Key,
-  Copy,
-  Check,
   User,
-  Eye,
-  EyeOff,
   Code2,
 } from 'lucide-react';
 
 function ProfileContent() {
-  const {
-    user,
-    copyToClipboard,
-    copiedKey,
-  } = useDashboard();
-
-  const [showAccountToken, setShowAccountToken] = React.useState(false);
+  const { user } = useDashboard();
 
   const accountToken = user?.id ? `pmk_usr_${user.id}` : 'pmk_usr_unauthenticated';
   const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8787';
@@ -46,13 +38,11 @@ function ProfileContent() {
   );
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      <div>
-        <h1 className="text-lg font-semibold tracking-tight text-foreground">Профіль користувача та API Ключі</h1>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          Керуйте даними облікового запису та глобальним персональним токеном для підключення AI-асистентів.
-        </p>
-      </div>
+    <div className="px-4 lg:px-6 py-4 md:py-6 space-y-6">
+      <PageHeader
+        title="Профіль користувача та API Ключі"
+        description="Керуйте даними облікового запису та глобальним персональним токеном для підключення AI-асистентів."
+      />
 
       {/* 1. User Profile Details Card */}
       <Card>
@@ -89,14 +79,11 @@ function ProfileContent() {
               <div className="h-10 px-3 rounded-md border border-input bg-secondary/40 font-mono text-[11px] text-foreground flex items-center justify-between">
                 <span className="truncate mr-2 select-all">{user?.id || '—'}</span>
                 {user?.id && (
-                  <Button
-                    variant="ghost"
+                  <CopyButton
+                    value={user.id}
                     size="icon"
                     className="h-6 w-6 shrink-0"
-                    onClick={() => copyToClipboard(user.id, 'user-id')}
-                  >
-                    {copiedKey === 'user-id' ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
-                  </Button>
+                  />
                 )}
               </div>
             </div>
@@ -118,66 +105,23 @@ function ProfileContent() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="rounded-lg border border-border bg-secondary/50 p-3.5">
-            <div className="flex items-center justify-between text-xs mb-1.5">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <Key className="h-3 w-3 text-muted-foreground" />
-                Персональний токен розробника
-              </span>
-              <button
-                type="button"
-                onClick={() => setShowAccountToken(!showAccountToken)}
-                className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1 cursor-pointer"
-              >
-                {showAccountToken ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                <span>{showAccountToken ? 'Приховати' : 'Показати'}</span>
-              </button>
-            </div>
-
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
-              <div className="font-mono text-xs text-foreground select-all truncate font-semibold">
-                {showAccountToken ? accountToken : `${accountToken.slice(0, 14)}••••••••••••••••••••••••`}
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 gap-1.5 text-xs cursor-pointer"
-                  onClick={() => copyToClipboard(accountToken, 'profile-token')}
-                >
-                  {copiedKey === 'profile-token' ? (
-                    <>
-                      <Check className="h-3.5 w-3.5 text-emerald-400" />
-                      <span>Скопійовано токен</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="h-3.5 w-3.5" />
-                      <span>Копіювати токен</span>
-                    </>
-                  )}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 gap-1.5 text-xs cursor-pointer"
-                  onClick={() => copyToClipboard(cursorMcpConfig, 'profile-cursor-config')}
-                >
-                  {copiedKey === 'profile-cursor-config' ? (
-                    <>
-                      <Check className="h-3.5 w-3.5 text-emerald-400" />
-                      <span>Скопійовано .cursor/mcp.json</span>
-                    </>
-                  ) : (
-                    <>
-                      <Code2 className="h-3.5 w-3.5" />
-                      <span>Копіювати MCP конфіг</span>
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-          </div>
+          <SecretField
+            label="Персональний токен розробника"
+            value={accountToken}
+            visibleChars={14}
+            icon={<Key className="h-3 w-3 text-muted-foreground" />}
+            copyLabel="Копіювати токен"
+            actions={
+              <CopyButton
+                value={cursorMcpConfig}
+                label="Скопіювати MCP конфіг"
+                copiedLabel="Скопійовано .cursor/mcp.json"
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 text-xs"
+              />
+            }
+          />
 
           <div className="rounded-md border border-border/60 bg-muted/20 p-3 text-[11px] text-muted-foreground flex items-center justify-between flex-wrap gap-2">
             <span>

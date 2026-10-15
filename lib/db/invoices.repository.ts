@@ -1,6 +1,8 @@
-import { getDb } from './db';
+import { eq, and, desc, sql } from 'drizzle-orm';
+import { getDrizzle } from './drizzle';
+import { invoices } from './schema';
 import type { InvoiceRecord, InvoiceStats } from '@/src/types/models';
-import type { InvoiceStatus, PaymentInfo, CancelItem } from '@/src/types/acquiring';
+import type { InvoiceStatus, PaymentInfo, CancelItem, PaymentType } from '@/src/types/acquiring';
 
 export interface CreateInvoiceDTO {
   id: string;
@@ -21,8 +23,13 @@ export interface CreateInvoiceDTO {
 
 export class InvoicesRepository {
   async findById(id: string): Promise<InvoiceRecord | null> {
-    const db = await getDb();
-    const invoice = await db.queryFirst<InvoiceRecord>('SELECT * FROM invoices WHERE id = ?', [id]);
+    const db = await getDrizzle();
+    const [invoice] = await db
+      .select()
+      .from(invoices)
+      .where(eq(invoices.id, id))
+      .limit(1);
+
     if (!invoice) return null;
 
     // Check if invoice has exceeded its validity (default 900s / 15 minutes)
@@ -32,83 +39,87 @@ export class InvoicesRepository {
       const expiresAtMs = createdAtMs + validitySec * 1000;
 
       if (Date.now() > expiresAtMs) {
-        await db.execute(
-          `UPDATE invoices SET
-            status = 'expired',
-            failure_reason = 'Час дії рахунку вичерпано (15 хв)',
-            modified_date = ?
-          WHERE id = ?`,
-          [new Date().toISOString(), invoice.id]
-        );
+        const now = new Date().toISOString();
+        const [expired] = await db
+          .update(invoices)
+          .set({
+            status: 'expired',
+            failure_reason: 'Час дії рахунку вичерпано (15 хв)',
+            modified_date: now,
+          })
+          .where(eq(invoices.id, invoice.id))
+          .returning();
 
-        return db.queryFirst<InvoiceRecord>('SELECT * FROM invoices WHERE id = ?', [id]);
+        return (expired as InvoiceRecord) || null;
       }
     }
 
-    return invoice;
+    return invoice as InvoiceRecord;
   }
 
-  async list(options: { projectId?: string; status?: InvoiceStatus; limit?: number; offset?: number } = {}): Promise<InvoiceRecord[]> {
-    const db = await getDb();
-    const conditions: string[] = [];
-    const params: (string | number)[] = [];
+  async list(
+    options: {
+      projectId?: string;
+      status?: InvoiceStatus;
+      limit?: number;
+      offset?: number;
+    } = {}
+  ): Promise<InvoiceRecord[]> {
+    const db = await getDrizzle();
+    const conditions = [];
 
     if (options.projectId) {
-      conditions.push('project_id = ?');
-      params.push(options.projectId);
+      conditions.push(eq(invoices.project_id, options.projectId));
     }
     if (options.status) {
-      conditions.push('status = ?');
-      params.push(options.status);
+      conditions.push(eq(invoices.status, options.status));
     }
 
-    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     const limit = options.limit || 50;
     const offset = options.offset || 0;
 
-    const query = `SELECT * FROM invoices ${where} ORDER BY created_date DESC LIMIT ? OFFSET ?`;
-    return db.queryAll<InvoiceRecord>(query, [...params, limit, offset]);
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const results = await db
+      .select()
+      .from(invoices)
+      .where(whereClause)
+      .orderBy(desc(invoices.created_date))
+      .limit(limit)
+      .offset(offset);
+
+    return results as InvoiceRecord[];
   }
 
   async create(dto: CreateInvoiceDTO): Promise<InvoiceRecord> {
-    const db = await getDb();
+    const db = await getDrizzle();
     const now = new Date().toISOString();
 
-    await db.execute(
-      `INSERT INTO invoices (
-        id, project_id, amount, ccy, final_amount, status, payment_type,
-        reference, destination, comment, basket_json,
-        redirect_url, success_url, fail_url, webhook_url,
-        validity, created_date, modified_date
-      ) VALUES (
-        ?, ?, ?, ?, ?, 'created', ?,
-        ?, ?, ?, ?,
-        ?, ?, ?, ?,
-        ?, ?, ?
-      )`,
-      [
-        dto.id,
-        dto.projectId,
-        dto.amount,
-        dto.ccy ?? 980,
-        dto.amount,
-        dto.paymentType ?? 'debit',
-        dto.reference || null,
-        dto.destination || null,
-        dto.comment || null,
-        dto.basketJson || null,
-        dto.redirectUrl || null,
-        dto.successUrl || null,
-        dto.failUrl || null,
-        dto.webhookUrl || null,
-        dto.validity ?? 900,
-        now,
-        now,
-      ]
-    );
+    const [record] = await db
+      .insert(invoices)
+      .values({
+        id: dto.id,
+        project_id: dto.projectId,
+        amount: dto.amount,
+        ccy: dto.ccy ?? 980,
+        final_amount: dto.amount,
+        status: 'created',
+        payment_type: (dto.paymentType as PaymentType) ?? 'debit',
+        reference: dto.reference || null,
+        destination: dto.destination || null,
+        comment: dto.comment || null,
+        basket_json: dto.basketJson || null,
+        redirect_url: dto.redirectUrl || null,
+        success_url: dto.successUrl || null,
+        fail_url: dto.failUrl || null,
+        webhook_url: dto.webhookUrl || null,
+        validity: dto.validity ?? 900,
+        created_date: now,
+        modified_date: now,
+      })
+      .returning();
 
-    const record = await this.findById(dto.id);
-    return record!;
+    return record as InvoiceRecord;
   }
 
   async updateStatus(
@@ -122,8 +133,13 @@ export class InvoicesRepository {
       cancelItem?: CancelItem;
     } = {}
   ): Promise<InvoiceRecord | null> {
-    const db = await getDb();
-    const existing = await this.findById(id);
+    const db = await getDrizzle();
+    const [existing] = await db
+      .select()
+      .from(invoices)
+      .where(eq(invoices.id, id))
+      .limit(1);
+
     if (!existing) return null;
 
     const now = new Date().toISOString();
@@ -141,42 +157,37 @@ export class InvoicesRepository {
       cancelListJson = JSON.stringify(currentList);
     }
 
-    const finalAmount = options.finalAmount !== undefined ? options.finalAmount : existing.final_amount;
+    const finalAmount =
+      options.finalAmount !== undefined ? options.finalAmount : existing.final_amount;
 
-    await db.execute(
-      `UPDATE invoices SET
-        status = ?,
-        final_amount = ?,
-        failure_reason = ?,
-        err_code = ?,
-        payment_info_json = ?,
-        cancel_list_json = ?,
-        modified_date = ?
-      WHERE id = ?`,
-      [
+    const [updated] = await db
+      .update(invoices)
+      .set({
         status,
-        finalAmount ?? null,
-        options.failureReason ?? existing.failure_reason ?? null,
-        options.errCode ?? existing.err_code ?? null,
-        paymentInfoJson ?? null,
-        cancelListJson ?? null,
-        now,
-        id,
-      ]
-    );
+        final_amount: finalAmount ?? null,
+        failure_reason: options.failureReason ?? existing.failure_reason ?? null,
+        err_code: options.errCode ?? existing.err_code ?? null,
+        payment_info_json: paymentInfoJson ?? null,
+        cancel_list_json: cancelListJson ?? null,
+        modified_date: now,
+      })
+      .where(eq(invoices.id, id))
+      .returning();
 
-    return this.findById(id);
+    return (updated as InvoiceRecord) || null;
   }
 
   async countStats(projectId: string): Promise<InvoiceStats> {
-    const db = await getDb();
-    const rows = await db.queryAll<{ status: string; count: number; sum: number | null }>(
-      `SELECT status, COUNT(*) as count, SUM(amount) as sum
-       FROM invoices
-       WHERE project_id = ?
-       GROUP BY status`,
-      [projectId]
-    );
+    const db = await getDrizzle();
+    const rows = await db
+      .select({
+        status: invoices.status,
+        count: sql<number>`cast(count(*) as integer)`,
+        sum: sql<number>`cast(sum(${invoices.amount}) as integer)`,
+      })
+      .from(invoices)
+      .where(eq(invoices.project_id, projectId))
+      .groupBy(invoices.status);
 
     let totalAmount = 0;
     let totalCount = 0;

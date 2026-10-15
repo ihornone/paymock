@@ -4,11 +4,24 @@ import { InvoicesRepository } from '@/lib/db/invoices.repository';
 import { ProjectsRepository } from '@/lib/db/projects.repository';
 import { generateInvoiceId } from '@/src/shared/utils/id';
 import { logger } from '@/src/shared/logger';
+import { isSafeWebhookUrl } from '@/lib/webhook';
+import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit';
 import type { CreateInvoiceRequest } from '@/src/types/acquiring';
 
 export async function POST(req: NextRequest) {
   const auth = await validateMerchantToken(req);
   if (auth instanceof NextResponse) return auth;
+
+  // Rate limit: 120 invoice creations per minute per project
+  const clientIp = getClientIp(req);
+  const rateLimit = checkRateLimit({
+    key: `invoice_create:${auth.project.id}:${clientIp}`,
+    limit: 120,
+    windowMs: 60_000,
+  });
+  if (!rateLimit.success) {
+    return rateLimitResponse(rateLimit, 'Rate limit exceeded: too many invoice creation requests.');
+  }
 
   let body: CreateInvoiceRequest;
   try {
@@ -28,6 +41,13 @@ export async function POST(req: NextRequest) {
     }
   } else if (body.amount <= 0) {
     return NextResponse.json({ errCode: 'BAD_REQUEST', errText: "'amount' must be greater than 0" }, { status: 400 });
+  }
+
+  if (body.webHookUrl && !isSafeWebhookUrl(body.webHookUrl)) {
+    return NextResponse.json(
+      { errCode: 'BAD_REQUEST', errText: "invalid or unsafe 'webHookUrl' destination" },
+      { status: 400 }
+    );
   }
 
   const invoiceId = generateInvoiceId();

@@ -2,12 +2,23 @@ import { NextRequest, NextResponse } from 'next/server';
 import { InvoicesRepository } from '@/lib/db/invoices.repository';
 import { sendWebhook } from '@/lib/webhook';
 import { logger } from '@/src/shared/logger';
+import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit';
 import type { InvoiceStatus } from '@/src/types/acquiring';
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ invoiceId: string }> }
 ) {
+  const clientIp = getClientIp(req);
+  const rateLimit = checkRateLimit({
+    key: `pay_action:${clientIp}`,
+    limit: 60,
+    windowMs: 60_000,
+  });
+  if (!rateLimit.success) {
+    return rateLimitResponse(rateLimit, 'Rate limit exceeded: too many checkout actions.');
+  }
+
   const { invoiceId } = await params;
 
   let body: { action: 'success' | 'failure' | 'expired' };

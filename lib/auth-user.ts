@@ -1,16 +1,22 @@
 import { NextRequest } from 'next/server';
 
 export function getRequestUserId(req: NextRequest): string | null {
-  // 1. Check custom header (from client fetch)
-  const headerUserId = req.headers.get('x-user-id');
-  if (headerUserId && headerUserId.trim()) {
-    return headerUserId.trim();
+  // 1. Check X-Token for Personal Access Token (pmk_usr_...)
+  const xToken = req.headers.get('x-token') || req.headers.get('X-Token');
+  if (xToken) {
+    const trimmed = xToken.trim();
+    if (trimmed.startsWith('pmk_usr_')) {
+      return trimmed.replace('pmk_usr_', '').trim();
+    }
   }
 
   // 2. Check Authorization header
   const authHeader = req.headers.get('authorization');
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.substring(7).trim();
+    if (token.startsWith('pmk_usr_')) {
+      return token.replace('pmk_usr_', '').trim();
+    }
     const userId = parseJwtSub(token);
     if (userId) return userId;
   }
@@ -20,6 +26,14 @@ export function getRequestUserId(req: NextRequest): string | null {
   if (sessionCookie) {
     const userId = parseJwtSub(sessionCookie);
     if (userId) return userId;
+  }
+
+  // 4. In development and automated testing only: allow fallback to x-user-id header
+  if (process.env.NODE_ENV !== 'production') {
+    const headerUserId = req.headers.get('x-user-id');
+    if (headerUserId && headerUserId.trim()) {
+      return headerUserId.trim();
+    }
   }
 
   return null;

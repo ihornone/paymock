@@ -27,7 +27,7 @@ export default function RootLayout({
         ...dark,
         variables: {
           ...dark.variables,
-          colorBackground: '#121214',
+          colorBackground: '#1d1d1d',
           colorPrimary: '#3b82f6',
           colorForeground: '#f4f4f5',
           colorMutedForeground: '#a1a1aa',
@@ -36,17 +36,17 @@ export default function RootLayout({
         },
         elements: {
           ...dark.elements,
-          card: 'bg-[#121214] border border-[#27272a] shadow-2xl text-[#f4f4f5]',
-          navbar: 'bg-[#121214] border-r border-[#27272a]',
-          userButtonPopoverCard: 'bg-[#121214] border border-[#27272a] shadow-2xl text-[#f4f4f5] rounded-xl overflow-hidden',
-          userButtonPopoverActionButton: 'text-[#f4f4f5] hover:bg-[#27272a] hover:text-white transition-colors duration-150',
+          card: 'bg-[#1d1d1d] border border-[#2e2e2e] shadow-2xl text-[#f4f4f5]',
+          navbar: 'bg-[#1d1d1d] border-r border-[#2e2e2e]',
+          userButtonPopoverCard: 'bg-[#1d1d1d] border border-[#2e2e2e] shadow-2xl text-[#f4f4f5] rounded-xl overflow-hidden',
+          userButtonPopoverActionButton: 'text-[#f4f4f5] hover:bg-[#292929] hover:text-white transition-colors duration-150',
           userButtonPopoverActionButtonIcon: 'text-[#a1a1aa]',
           userButtonPopoverActionButtonText: 'text-[#f4f4f5] font-medium text-xs',
-          userButtonPopoverCustomItemButton: 'text-[#f4f4f5] hover:bg-[#27272a]',
-          userButtonPopoverFooter: 'border-t border-[#27272a] bg-[#0c0c0e]',
+          userButtonPopoverCustomItemButton: 'text-[#f4f4f5] hover:bg-[#292929]',
+          userButtonPopoverFooter: 'border-t border-[#2e2e2e] bg-[#151515]',
           userPreviewMainIdentifier: 'text-[#f4f4f5] font-semibold text-xs',
           userPreviewSecondaryIdentifier: 'text-[#a1a1aa] text-[11px]',
-          userButtonAvatarBox: 'h-8 w-8 rounded-full ring-1 ring-[#27272a]',
+          userButtonAvatarBox: 'h-8 w-8 rounded-full ring-1 ring-[#2e2e2e]',
         },
       }}
     >

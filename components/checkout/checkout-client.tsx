@@ -431,11 +431,17 @@ export function CheckoutClient({ invoice, project }: CheckoutClientProps) {
                 >
                   {/* Card Number Field */}
                   <div className="relative rounded-lg border border-input bg-background px-3.5 pt-3.5 pb-2 shadow-xs focus-within:border-primary focus-within:ring-1 focus-within:ring-ring transition">
-                    <label className="absolute top-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    <label
+                      htmlFor="checkout-card-number"
+                      className="absolute top-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+                    >
                       Номер картки
                     </label>
                     <div className="flex items-center justify-between pt-2">
                       <input
+                        id="checkout-card-number"
+                        name="cardNumber"
+                        autoComplete="cc-number"
                         type="text"
                         value={cardNumber}
                         onChange={(e) => setCardNumber(e.target.value)}
@@ -449,10 +455,16 @@ export function CheckoutClient({ invoice, project }: CheckoutClientProps) {
                   {/* Expiry & CVC Grid */}
                   <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
                     <div className="relative rounded-lg border border-input bg-background px-3.5 pt-3.5 pb-2 shadow-xs focus-within:border-primary focus-within:ring-1 focus-within:ring-ring transition">
-                      <label className="absolute top-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      <label
+                        htmlFor="checkout-exp-date"
+                        className="absolute top-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+                      >
                         Строк дії
                       </label>
                       <input
+                        id="checkout-exp-date"
+                        name="expDate"
+                        autoComplete="cc-exp"
                         type="text"
                         value={expDate}
                         onChange={(e) => setExpDate(e.target.value)}
@@ -462,10 +474,16 @@ export function CheckoutClient({ invoice, project }: CheckoutClientProps) {
                       />
                     </div>
                     <div className="relative rounded-lg border border-input bg-background px-3.5 pt-3.5 pb-2 shadow-xs focus-within:border-primary focus-within:ring-1 focus-within:ring-ring transition">
-                      <label className="absolute top-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      <label
+                        htmlFor="checkout-cvc"
+                        className="absolute top-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+                      >
                         CVC2
                       </label>
                       <input
+                        id="checkout-cvc"
+                        name="cvc"
+                        autoComplete="cc-csc"
                         type="password"
                         value={cvc}
                         onChange={(e) => setCvc(e.target.value)}

@@ -1,8 +1,6 @@
 'use client';
 
 import * as React from 'react';
-import { createRoot } from 'react-dom/client';
-import { Copy, Check, ChevronDown } from 'lucide-react';
 
 interface DocContentViewerProps {
   htmlContent: string;
@@ -64,12 +62,15 @@ export function DocContentViewer({ htmlContent }: DocContentViewerProps) {
 
         summary.appendChild(leftBox);
 
-        // Right container: Lucide ChevronDown Icon
+        // Right container: SVG ChevronDown Icon
         const chevronWrapper = document.createElement('div');
         chevronWrapper.className =
           'text-muted-foreground transition-transform duration-200 shrink-0 ml-2 group-open:rotate-180';
-        const chevronRoot = createRoot(chevronWrapper);
-        chevronRoot.render(<ChevronDown className="h-4 w-4" />);
+        chevronWrapper.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        `;
         summary.appendChild(chevronWrapper);
       }
 
@@ -126,46 +127,50 @@ export function DocContentViewer({ htmlContent }: DocContentViewerProps) {
       langSpan.textContent = langName || 'CODE';
       headerBar.appendChild(langSpan);
 
-      // Create container for Lucide Copy Button
-      const copyBtnContainer = document.createElement('div');
-      headerBar.appendChild(copyBtnContainer);
+      // Create native interactive copy button (no React createRoot memory leak)
+      const copyButton = document.createElement('button');
+      copyButton.type = 'button';
+      copyButton.className =
+        'inline-flex items-center gap-1.5 rounded px-2 py-1 text-[11px] text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition cursor-pointer font-sans font-medium';
 
-      const CopyButtonComponent = () => {
-        const [copied, setCopied] = React.useState(false);
-
-        const handleCopy = async () => {
-          try {
-            await navigator.clipboard.writeText(textToCopy);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-          } catch (err) {
-            console.error('Failed to copy code:', err);
-          }
-        };
-
-        return (
-          <button
-            type="button"
-            onClick={handleCopy}
-            className="inline-flex items-center gap-1.5 rounded px-2 py-1 text-[11px] text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition cursor-pointer font-sans font-medium"
-          >
-            {copied ? (
-              <>
-                <Check className="h-3.5 w-3.5 text-emerald-400" />
-                <span className="text-emerald-400 font-medium">Скопійовано</span>
-              </>
-            ) : (
-              <>
-                <Copy className="h-3.5 w-3.5" />
-                <span>Копіювати</span>
-              </>
-            )}
-          </button>
-        );
+      const renderCopyDefault = () => {
+        copyButton.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
+            <rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect>
+            <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>
+          </svg>
+          <span>Копіювати</span>
+        `;
       };
 
-      const copyRoot = createRoot(copyBtnContainer);
-      copyRoot.render(<CopyButtonComponent />);
+      const renderCopySuccess = () => {
+        copyButton.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5 text-emerald-400">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+          <span class="text-emerald-400 font-medium">Скопійовано</span>
+        `;
+      };
+
+      renderCopyDefault();
+
+      let copyTimer: ReturnType<typeof setTimeout> | null = null;
+      copyButton.addEventListener('click', async (e) => {
+        e.preventDefault();
+        try {
+          await navigator.clipboard.writeText(textToCopy);
+          renderCopySuccess();
+          if (copyTimer) clearTimeout(copyTimer);
+          copyTimer = setTimeout(() => {
+            renderCopyDefault();
+            copyTimer = null;
+          }, 2000);
+        } catch (err) {
+          console.error('Failed to copy code:', err);
+        }
+      });
+
+      headerBar.appendChild(copyButton);
 
       // Restyle pre element
       pre.className = isInsideDetails

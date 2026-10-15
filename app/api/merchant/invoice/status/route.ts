@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { validateMerchantToken } from '@/lib/auth';
 import { InvoicesRepository } from '@/lib/db/invoices.repository';
 import { logger } from '@/src/shared/logger';
-import type { InvoiceStatusResponse } from '@/src/types/acquiring';
+import { toInvoiceStatusResponse } from '@/src/services/invoice-mapper';
 
 export async function GET(req: NextRequest) {
   const auth = await validateMerchantToken(req);
@@ -26,21 +26,7 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const response: InvoiceStatusResponse = {
-    invoiceId: invoice.id,
-    status: invoice.status,
-    failureReason: invoice.failure_reason || undefined,
-    errCode: invoice.err_code || undefined,
-    amount: invoice.amount,
-    ccy: invoice.ccy,
-    finalAmount: invoice.final_amount ?? invoice.amount,
-    createdDate: invoice.created_date,
-    modifiedDate: invoice.modified_date,
-    reference: invoice.reference || undefined,
-    destination: invoice.destination || undefined,
-    cancelList: invoice.cancel_list_json ? JSON.parse(invoice.cancel_list_json) : undefined,
-    paymentInfo: invoice.payment_info_json ? JSON.parse(invoice.payment_info_json) : undefined,
-  };
+  const response = toInvoiceStatusResponse(invoice);
 
   logger.info({
     event: 'invoice_status_checked',
