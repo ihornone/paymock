@@ -282,6 +282,150 @@ async function runTests() {
   assert.ok(resetTokenParsed.newToken.startsWith('pmk_live_'));
   assert.notStrictEqual(resetTokenParsed.newToken, createdProjectParsed.project.token);
 
+  // 8.6 Test server/discover probe (Modern MCP protocol 2026-07-28)
+  const resDiscover = await fetch(`${BASE_URL}/api/mcp`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Token': newProjectData.project.token,
+      'mcp-method': 'server/discover',
+      'mcp-protocol-version': '2026-07-28',
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 6,
+      method: 'server/discover',
+    }),
+  });
+  assert.strictEqual(resDiscover.status, 200, 'server/discover should return 200 OK');
+  const discoverData = (await resDiscover.json()) as any;
+  assert.strictEqual(discoverData.jsonrpc, '2.0');
+  assert.ok(Array.isArray(discoverData.result.supportedVersions));
+  assert.ok(discoverData.result.capabilities.tools);
+  console.log('✅ MCP server/discover probe verified successfully.');
+
+  // 8.7 Test MCP initialize handshake
+  const resInit = await fetch(`${BASE_URL}/api/mcp`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Token': newProjectData.project.token,
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 7,
+      method: 'initialize',
+      params: {
+        protocolVersion: '2024-11-05',
+        capabilities: {},
+        clientInfo: { name: 'paymock-test-client', version: '1.0.0' },
+      },
+    }),
+  });
+  assert.strictEqual(resInit.status, 200);
+  const initData = (await resInit.json()) as any;
+  assert.strictEqual(initData.result.protocolVersion, '2024-11-05');
+  console.log('✅ MCP initialize handshake verified successfully.');
+
+  // 8.8 Test notifications/initialized notification (must return 204/200 without error)
+  const resNotification = await fetch(`${BASE_URL}/api/mcp`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Token': newProjectData.project.token,
+      'mcp-protocol-version': '2024-11-05',
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      method: 'notifications/initialized',
+    }),
+  });
+  assert.ok(
+    resNotification.status === 200 || resNotification.status === 204,
+    `notifications/initialized should return 204 or 200, got ${resNotification.status}`
+  );
+  console.log('✅ MCP notifications/initialized acknowledged successfully without 404.');
+
+  // 8.9 Test MCP ping
+  const resPing = await fetch(`${BASE_URL}/api/mcp`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Token': newProjectData.project.token,
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 8,
+      method: 'ping',
+    }),
+  });
+  assert.strictEqual(resPing.status, 200);
+  const pingData = (await resPing.json()) as any;
+  assert.deepStrictEqual(pingData.result, {});
+  console.log('✅ MCP ping verified successfully.');
+
+  // 8.10 Test MCP resources/list and resources/read
+  const resResourcesList = await fetch(`${BASE_URL}/api/mcp`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Token': newProjectData.project.token,
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 9,
+      method: 'resources/list',
+    }),
+  });
+  assert.strictEqual(resResourcesList.status, 200);
+  const resourcesData = (await resResourcesList.json()) as any;
+  assert.ok(Array.isArray(resourcesData.result.resources));
+  assert.ok(resourcesData.result.resources.some((r: any) => r.uri === 'paymock://projects'));
+
+  const resResourceRead = await fetch(`${BASE_URL}/api/mcp`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Token': newProjectData.project.token,
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 10,
+      method: 'resources/read',
+      params: { uri: 'paymock://projects' },
+    }),
+  });
+  assert.strictEqual(resResourceRead.status, 200);
+  const resourceReadData = (await resResourceRead.json()) as any;
+  assert.ok(Array.isArray(resourceReadData.result.contents));
+  console.log('✅ MCP resources/list and resources/read verified successfully.');
+
+  // 8.11 Test unknown method returns JSON-RPC error with HTTP 200 (not 404)
+  const resUnknownMethod = await fetch(`${BASE_URL}/api/mcp`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Token': newProjectData.project.token,
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 11,
+      method: 'non_existent_mcp_method',
+    }),
+  });
+  assert.strictEqual(resUnknownMethod.status, 200, 'Unknown JSON-RPC method should return 200 with error object');
+  const unknownMethodData = (await resUnknownMethod.json()) as any;
+  assert.strictEqual(unknownMethodData.error.code, -32601);
+  console.log('✅ Unknown JSON-RPC method cleanly handled with -32601 and HTTP 200.');
+
+  // 8.12 Test OPTIONS CORS preflight
+  const resOptions = await fetch(`${BASE_URL}/api/mcp`, {
+    method: 'OPTIONS',
+  });
+  assert.strictEqual(resOptions.status, 204);
+  assert.strictEqual(resOptions.headers.get('Access-Control-Allow-Origin'), '*');
+  console.log('✅ MCP OPTIONS CORS preflight verified successfully.');
+
   console.log('✅ Global MCP Server verified: dynamic project creation, invoice generation & token reset.');
 
   console.log('\n🎉 ALL PAYMOCK E2E VERIFICATION TESTS PASSED SUCCESSFULLY! 🚀');

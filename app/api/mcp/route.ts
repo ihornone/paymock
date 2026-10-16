@@ -7,6 +7,13 @@ import { MCP_TOOLS, executeMcpTool } from '@/src/mcp/tools';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 import type { Project } from '@/src/types/models';
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers':
+    'Content-Type, Authorization, X-Token, x-token, mcp-protocol-version, mcp-method, baggage, sentry-trace',
+};
+
 function extractToken(req: NextRequest): string | null {
   const xToken = req.headers.get('x-token') || req.headers.get('X-Token');
   if (xToken && xToken.trim()) return xToken.trim();
@@ -22,28 +29,39 @@ function extractToken(req: NextRequest): string | null {
   return null;
 }
 
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: corsHeaders,
+  });
+}
+
 export async function GET(req: NextRequest) {
   const origin = req.nextUrl.origin;
   const token = extractToken(req);
 
-  return NextResponse.json({
-    name: 'paymock-mcp-server',
-    version: '1.1.0',
-    protocolVersion: '2024-11-05',
-    status: 'active',
-    mode: 'global-account-scoped',
-    endpoint: `${origin}/api/mcp`,
-    authenticated: !!token,
-    capabilities: {
-      tools: MCP_TOOLS.map((t) => t.name),
-    },
-    clientConfigExample: {
-      url: `${origin}/api/mcp`,
-      headers: {
-        'X-Token': token || 'pmk_live_токен_будь_якого_проєкту_або_акаунта',
+  return NextResponse.json(
+    {
+      name: 'paymock-mcp-server',
+      version: '1.1.0',
+      protocolVersion: '2024-11-05',
+      status: 'active',
+      mode: 'global-account-scoped',
+      endpoint: `${origin}/api/mcp`,
+      authenticated: !!token,
+      capabilities: {
+        tools: MCP_TOOLS.map((t) => t.name),
+        resources: ['paymock://projects'],
+      },
+      clientConfigExample: {
+        url: `${origin}/api/mcp`,
+        headers: {
+          'X-Token': token || 'pmk_live_токен_будь_якого_проєкту_або_акаунта',
+        },
       },
     },
-  });
+    { headers: corsHeaders }
+  );
 }
 
 export async function POST(req: NextRequest) {
@@ -81,7 +99,7 @@ export async function POST(req: NextRequest) {
         },
         id: null,
       },
-      { status: 401 }
+      { status: 401, headers: corsHeaders }
     );
   }
 
@@ -91,11 +109,13 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json(
       { jsonrpc: '2.0', error: { code: -32700, message: 'Parse error' }, id: null },
-      { status: 400 }
+      { status: 400, headers: corsHeaders }
     );
   }
 
-  const { id, method, params } = body;
+  const method = body?.method || req.headers.get('mcp-method');
+  const id = body?.id;
+  const params = body?.params;
 
   const clientIp = getClientIp(req);
   const rateLimitKey = `mcp:${rawToken || clientIp}`;
@@ -118,6 +138,7 @@ export async function POST(req: NextRequest) {
       {
         status: 429,
         headers: {
+          ...corsHeaders,
           'Retry-After': String(Math.max(1, rateLimit.reset - Math.ceil(Date.now() / 1000))),
           'X-RateLimit-Limit': String(rateLimit.limit),
           'X-RateLimit-Remaining': '0',
@@ -127,38 +148,91 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // 0. NOTIFICATIONS (Per JSON-RPC 2.0 & MCP, notifications have no id or start with notifications/)
+  if (
+    method === 'notifications/initialized' ||
+    (typeof method === 'string' && method.startsWith('notifications/')) ||
+    id === undefined
+  ) {
+    return new NextResponse(null, {
+      status: 204,
+      headers: corsHeaders,
+    });
+  }
+
+  // 1. PING
+  if (method === 'ping') {
+    return NextResponse.json(
+      {
+        jsonrpc: '2.0',
+        id,
+        result: {},
+      },
+      { headers: corsHeaders }
+    );
+  }
+
+  // 2. SERVER DISCOVER (Modern MCP protocol probe)
+  if (method === 'server/discover') {
+    return NextResponse.json(
+      {
+        jsonrpc: '2.0',
+        id,
+        result: {
+          supportedVersions: ['2024-11-05'],
+          capabilities: { tools: {}, resources: {} },
+          serverInfo: {
+            name: 'paymock-mcp-server',
+            version: '1.1.0',
+          },
+          instructions:
+            'Paymock Acquiring Mock Platform MCP server. Manage merchant projects, test invoices, and inspect webhooks.',
+        },
+      },
+      { headers: corsHeaders }
+    );
+  }
+
   const origin = req.nextUrl.origin;
   const invoicesRepo = new InvoicesRepository();
   const webhooksRepo = new WebhooksRepository();
 
-  // 1. INITIALIZE
+  // 3. INITIALIZE
   if (method === 'initialize') {
-    return NextResponse.json({
-      jsonrpc: '2.0',
-      id,
-      result: {
-        protocolVersion: '2024-11-05',
-        capabilities: { tools: {}, resources: {} },
-        serverInfo: {
-          name: 'paymock-mcp-server',
-          version: '1.1.0',
+    return NextResponse.json(
+      {
+        jsonrpc: '2.0',
+        id,
+        result: {
+          protocolVersion: '2024-11-05',
+          capabilities: { tools: {}, resources: {} },
+          serverInfo: {
+            name: 'paymock-mcp-server',
+            version: '1.1.0',
+          },
+          instructions:
+            'Paymock Acquiring Mock Platform MCP server. Manage merchant projects, test invoices, and inspect webhooks.',
         },
       },
-    });
+      { headers: corsHeaders }
+    );
   }
 
-  // 2. TOOLS/LIST
+  // 4. TOOLS/LIST
   if (method === 'tools/list') {
-    return NextResponse.json({
-      jsonrpc: '2.0',
-      id,
-      result: {
-        tools: MCP_TOOLS,
+    return NextResponse.json(
+      {
+        jsonrpc: '2.0',
+        id,
+        result: {
+          tools: MCP_TOOLS,
+        },
       },
-    });
+      { headers: corsHeaders }
+    );
   }
 
-  // 3. TOOLS/CALL
+  // 5. TOOLS/CALL
   if (method === 'tools/call') {
     const toolName = params?.name;
     const args = params?.arguments || {};
@@ -174,25 +248,197 @@ export async function POST(req: NextRequest) {
         webhooksRepo,
       });
 
-      return NextResponse.json({
-        jsonrpc: '2.0',
-        id,
-        result,
-      });
-    } catch (err: any) {
-      return NextResponse.json({
-        jsonrpc: '2.0',
-        id,
-        error: {
-          code: -32603,
-          message: err.message || String(err),
+      return NextResponse.json(
+        {
+          jsonrpc: '2.0',
+          id,
+          result,
         },
-      });
+        { headers: corsHeaders }
+      );
+    } catch (err: any) {
+      return NextResponse.json(
+        {
+          jsonrpc: '2.0',
+          id,
+          error: {
+            code: -32603,
+            message: err.message || String(err),
+          },
+        },
+        { headers: corsHeaders }
+      );
     }
   }
 
+  // 6. RESOURCES/LIST
+  if (method === 'resources/list') {
+    const projects = await projectsRepo.list(userId);
+    const resources = [
+      {
+        uri: 'paymock://projects',
+        name: 'Список мерчант-проєктів',
+        description: 'Усі доступні проєкти та їхні параметри інтеграції (X-Token, URLs)',
+        mimeType: 'application/json',
+      },
+    ];
+
+    for (const project of projects) {
+      resources.push({
+        uri: `paymock://projects/${project.id}/stats`,
+        name: `Статистика проєкту ${project.name}`,
+        description: `Поточні фінансові показники та лічильники статусів для ${project.name}`,
+        mimeType: 'application/json',
+      });
+      resources.push({
+        uri: `paymock://projects/${project.id}/invoices/recent`,
+        name: `Останні рахунки проєкту ${project.name}`,
+        description: `Останні 10 згенерованих рахунків для ${project.name}`,
+        mimeType: 'application/json',
+      });
+    }
+
+    return NextResponse.json(
+      {
+        jsonrpc: '2.0',
+        id,
+        result: { resources },
+      },
+      { headers: corsHeaders }
+    );
+  }
+
+  // 7. RESOURCES/READ
+  if (method === 'resources/read') {
+    const uri = params?.uri;
+    if (!uri || typeof uri !== 'string') {
+      return NextResponse.json(
+        {
+          jsonrpc: '2.0',
+          id,
+          error: { code: -32602, message: 'Invalid params: uri is required' },
+        },
+        { headers: corsHeaders }
+      );
+    }
+
+    if (uri === 'paymock://projects') {
+      const projects = await projectsRepo.list(userId);
+      return NextResponse.json(
+        {
+          jsonrpc: '2.0',
+          id,
+          result: {
+            contents: [
+              {
+                uri,
+                mimeType: 'application/json',
+                text: JSON.stringify(projects, null, 2),
+              },
+            ],
+          },
+        },
+        { headers: corsHeaders }
+      );
+    }
+
+    const statsMatch = uri.match(/^paymock:\/\/projects\/([^/]+)\/stats$/);
+    if (statsMatch) {
+      const pId = statsMatch[1];
+      const project = await projectsRepo.findById(pId, userId);
+      if (!project) {
+        return NextResponse.json(
+          {
+            jsonrpc: '2.0',
+            id,
+            error: { code: -32002, message: `Resource not found or unauthorized: ${uri}` },
+          },
+          { headers: corsHeaders }
+        );
+      }
+      const stats = await invoicesRepo.countStats(pId);
+      return NextResponse.json(
+        {
+          jsonrpc: '2.0',
+          id,
+          result: {
+            contents: [
+              {
+                uri,
+                mimeType: 'application/json',
+                text: JSON.stringify(stats, null, 2),
+              },
+            ],
+          },
+        },
+        { headers: corsHeaders }
+      );
+    }
+
+    const recentInvoicesMatch = uri.match(/^paymock:\/\/projects\/([^/]+)\/invoices\/recent$/);
+    if (recentInvoicesMatch) {
+      const pId = recentInvoicesMatch[1];
+      const project = await projectsRepo.findById(pId, userId);
+      if (!project) {
+        return NextResponse.json(
+          {
+            jsonrpc: '2.0',
+            id,
+            error: { code: -32002, message: `Resource not found or unauthorized: ${uri}` },
+          },
+          { headers: corsHeaders }
+        );
+      }
+      const invoices = await invoicesRepo.list({ projectId: pId, limit: 10 });
+      return NextResponse.json(
+        {
+          jsonrpc: '2.0',
+          id,
+          result: {
+            contents: [
+              {
+                uri,
+                mimeType: 'application/json',
+                text: JSON.stringify(invoices, null, 2),
+              },
+            ],
+          },
+        },
+        { headers: corsHeaders }
+      );
+    }
+
+    return NextResponse.json(
+      {
+        jsonrpc: '2.0',
+        id,
+        error: { code: -32002, message: `Resource not found: ${uri}` },
+      },
+      { headers: corsHeaders }
+    );
+  }
+
+  // 8. PROMPTS/LIST
+  if (method === 'prompts/list') {
+    return NextResponse.json(
+      {
+        jsonrpc: '2.0',
+        id,
+        result: {
+          prompts: [],
+        },
+      },
+      { headers: corsHeaders }
+    );
+  }
+
+  // 9. UNKNOWN METHOD
   return NextResponse.json(
-    { jsonrpc: '2.0', error: { code: -32601, message: `Method not found: ${method}` }, id },
-    { status: 404 }
+    {
+      jsonrpc: '2.0',
+      error: { code: -32601, message: `Method not found: ${method}` },
+      id: id ?? null,
+    },
+    { status: 200, headers: corsHeaders }
   );
 }
