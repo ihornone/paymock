@@ -2,6 +2,7 @@ import { WebhooksRepository } from '@/server/db/webhooks.repository';
 import { generateWebhookLogId } from '@/shared/utils/id';
 import { logger } from '@/shared/logger';
 import { toInvoiceStatusResponse } from '@/shared/services/invoice-mapper';
+import { getCloudflareContext } from '@opennextjs/cloudflare';
 import type { InvoiceRecord, WebhookLogRecord } from '@/shared/types/models';
 
 /**
@@ -149,4 +150,49 @@ export async function sendWebhook(invoice: InvoiceRecord): Promise<WebhookLogRec
   });
 
   return log;
+}
+
+/**
+ * Dispatches a webhook without blocking the response.
+ *
+ * On Cloudflare Workers a plain `sendWebhook(...)` without `await` is unsafe:
+ * the isolate is frozen as soon as the response is returned, which silently
+ * drops both the HTTP call and the `webhook_logs` INSERT. `waitUntil` keeps
+ * the task alive past the response instead.
+ *
+ * `waitUntil` must be registered **synchronously** — the isolate is frozen
+ * right after the response is sent, so an awaited lookup could land too late.
+ * The synchronous context accessor is therefore used, with an awaited task as
+ * the fallback for runtimes without an ExecutionContext (Node, tests).
+ */
+export function dispatchWebhook(invoice: InvoiceRecord): void {
+  const task = sendWebhook(invoice).catch((err: unknown) => {
+    logger.error({
+      event: 'webhook_dispatch_failed',
+      invoiceId: invoice.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  });
+
+  try {
+    const context = getCloudflareContext({ async: false });
+    // OpenNext exposes the Workers ExecutionContext as `ctx.ctx`.
+    // `waitUntil` must be invoked as a method — extracting it into a variable
+    // loses the `this` binding and Workers rejects the call with
+    // "Illegal invocation".
+    if (typeof context?.ctx?.waitUntil === 'function') {
+      context.ctx.waitUntil(task);
+      logger.info({ event: 'webhook_dispatched_deferred', invoiceId: invoice.id });
+      return;
+    }
+    logger.warn({ event: 'webhook_waituntil_unavailable', invoiceId: invoice.id });
+  } catch (err) {
+    logger.warn({
+      event: 'webhook_waituntil_unavailable',
+      invoiceId: invoice.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  void task;
 }

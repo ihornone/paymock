@@ -9,6 +9,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/sha
 import { PageHeader } from '@/features/dashboard/components/page-header';
 import { CopyButton } from '@/shared/components/ui/copy-button';
 import { SecretField } from '@/shared/components/ui/secret-field';
+import { Button } from '@/shared/components/ui/button';
 import {
   KeyRound,
   Key,
@@ -19,8 +20,35 @@ import {
 function ProfileContent() {
   const { user } = useDashboard();
 
-  const accountToken = user?.id ? `pmk_usr_${user.id}` : 'pmk_usr_unauthenticated';
+  // The personal access token is a real secret: it is generated on demand and
+  // only its SHA-256 hash is stored server-side. It is therefore shown only
+  // once — right after it was issued.
+  const [accountToken, setAccountToken] = React.useState<string | null>(null);
+  const [isIssuing, setIsIssuing] = React.useState(false);
+  const [tokenError, setTokenError] = React.useState<string | null>(null);
+
   const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8787';
+
+  const issueToken = React.useCallback(async () => {
+    setIsIssuing(true);
+    setTokenError(null);
+    try {
+      const res = await fetch('/api/account/tokens', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'default' }),
+      });
+      if (!res.ok) {
+        throw new Error('Не вдалося випустити токен');
+      }
+      const data = await res.json();
+      setAccountToken(data.token);
+    } catch (err) {
+      setTokenError(err instanceof Error ? err.message : 'Помилка запиту');
+    } finally {
+      setIsIssuing(false);
+    }
+  }, []);
 
   const cursorMcpConfig = JSON.stringify(
     {
@@ -28,7 +56,7 @@ function ProfileContent() {
         paymock: {
           url: `${currentOrigin}/api/mcp`,
           headers: {
-            'X-Token': accountToken,
+            'X-Token': accountToken || 'pmk_usr_ваш_токен_з_профілю',
           },
         },
       },
@@ -105,23 +133,51 @@ function ProfileContent() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <SecretField
-            label="Персональний токен розробника"
-            value={accountToken}
-            visibleChars={14}
-            icon={<Key className="h-3 w-3 text-muted-foreground" />}
-            copyLabel="Копіювати токен"
-            actions={
-              <CopyButton
-                value={cursorMcpConfig}
-                label="Скопіювати MCP конфіг"
-                copiedLabel="Скопійовано .cursor/mcp.json"
-                variant="outline"
+          {accountToken ? (
+            <>
+              <SecretField
+                label="Персональний токен розробника"
+                value={accountToken}
+                visibleChars={14}
+                icon={<Key className="h-3 w-3 text-muted-foreground" />}
+                copyLabel="Копіювати токен"
+                actions={
+                  <CopyButton
+                    value={cursorMcpConfig}
+                    label="Скопіювати MCP конфіг"
+                    copiedLabel="Скопійовано .cursor/mcp.json"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5 text-xs"
+                  />
+                }
+              />
+              <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                Цей токен показано лише один раз. Збережіть його — якщо загубите,
+                натисніть «Випустити новий токен», і попередній автоматично
+                відкликається.
+              </p>
+            </>
+          ) : (
+            <div className="rounded-md border border-border/60 bg-muted/20 p-4 text-xs space-y-3">
+              <p className="text-muted-foreground leading-relaxed">
+                Активного токена ще не створено. Випустіть токен, щоб підключити
+                AI-асистента до <code className="font-mono text-foreground font-semibold">/api/mcp</code>.
+              </p>
+              {tokenError && (
+                <p className="text-destructive">{tokenError}</p>
+              )}
+              <Button
+                onClick={issueToken}
+                disabled={isIssuing}
                 size="sm"
                 className="h-8 gap-1.5 text-xs"
-              />
-            }
-          />
+              >
+                <Key className="h-3 w-3" />
+                {isIssuing ? 'Випускаємо…' : 'Випустити новий токен'}
+              </Button>
+            </div>
+          )}
 
           <div className="rounded-md border border-border/60 bg-muted/20 p-3 text-[11px] text-muted-foreground flex items-center justify-between flex-wrap gap-2">
             <span>

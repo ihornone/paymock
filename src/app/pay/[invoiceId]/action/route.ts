@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { InvoicesRepository } from '@/server/db/invoices.repository';
-import { sendWebhook } from '@/server/webhook';
+import { dispatchWebhook } from '@/server/webhook';
 import { logger } from '@/shared/logger';
 import { checkRateLimit, getClientIp, rateLimitResponse } from '@/server/rate-limit';
 import type { InvoiceStatus } from '@/shared/types/acquiring';
@@ -81,7 +81,7 @@ export async function POST(
   );
 
   if (updatedInvoice) {
-    sendWebhook(updatedInvoice).catch(console.error);
+    dispatchWebhook(updatedInvoice);
   }
 
   let targetRedirectUrl: string | null = null;

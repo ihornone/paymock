@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { validateMerchantToken } from '@/server/auth/merchant';
 import { InvoicesRepository } from '@/server/db/invoices.repository';
-import { sendWebhook } from '@/server/webhook';
+import { dispatchWebhook } from '@/server/webhook';
 import { cancelInvoiceSchema } from './schema';
 import type { CancelInvoiceResponse } from '@/shared/types/acquiring';
 
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
   );
 
   if (updatedInvoice) {
-    sendWebhook(updatedInvoice).catch(console.error);
+    dispatchWebhook(updatedInvoice);
   }
 
   const response: CancelInvoiceResponse = {

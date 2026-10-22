@@ -2,11 +2,11 @@ import { ProjectsRepository } from '@/server/db/projects.repository';
 import { InvoicesRepository } from '@/server/db/invoices.repository';
 import { generateInvoiceId } from '@/shared/utils/id';
 import { isSafeWebhookUrl } from '@/server/webhook';
-import { resolveTargetProject } from './projects.handler';
+import { resolveTargetProject, type McpScope } from './projects.handler';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 export interface InvoicesHandlerContext {
-  userId: string;
+  scope: McpScope;
   origin: string;
   projectsRepo: ProjectsRepository;
   invoicesRepo: InvoicesRepository;
@@ -14,7 +14,7 @@ export interface InvoicesHandlerContext {
 
 export async function handleCreateInvoice(
   args: any,
-  { userId, origin, projectsRepo, invoicesRepo }: InvoicesHandlerContext
+  { scope, origin, projectsRepo, invoicesRepo }: InvoicesHandlerContext
 ): Promise<CallToolResult> {
   const { projectId, amount, ccy = 980, destination, comment, webHookUrl, redirectUrl } = args || {};
   if (!amount || !destination) {
@@ -25,7 +25,7 @@ export async function handleCreateInvoice(
     throw new Error('Небезпечний або невалідний webHookUrl (блокування SSRF).');
   }
 
-  const project = await resolveTargetProject(projectId, userId, projectsRepo);
+  const project = await resolveTargetProject(projectId, scope, projectsRepo);
 
   const invId = generateInvoiceId();
   const pageUrl = `${origin}/pay/${invId}`;
@@ -69,7 +69,7 @@ export async function handleCreateInvoice(
 
 export async function handleGetInvoice(
   args: any,
-  { userId, projectsRepo, invoicesRepo }: InvoicesHandlerContext
+  { scope, projectsRepo, invoicesRepo }: InvoicesHandlerContext
 ): Promise<CallToolResult> {
   const invId = args?.invoiceId;
   if (!invId) throw new Error('Потрібно вказати invoiceId.');
@@ -79,11 +79,8 @@ export async function handleGetInvoice(
     throw new Error(`Рахунок ${invId} не знайдено.`);
   }
 
-  // Verify user owns this invoice's project
-  const project = await projectsRepo.findById(invoice.project_id, userId);
-  if (!project) {
-    throw new Error(`Рахунок ${invId} належить проєкту іншого користувача.`);
-  }
+  // Verify the session is allowed to touch this invoice's project
+  await resolveTargetProject(invoice.project_id, scope, projectsRepo);
 
   return {
     content: [{ type: 'text', text: JSON.stringify(invoice, null, 2) }],
@@ -92,13 +89,13 @@ export async function handleGetInvoice(
 
 export async function handleListInvoices(
   args: any,
-  { userId, origin, projectsRepo, invoicesRepo }: InvoicesHandlerContext
+  { scope, origin, projectsRepo, invoicesRepo }: InvoicesHandlerContext
 ): Promise<CallToolResult> {
   const { projectId, status, limit = 20 } = args || {};
 
   // `resolveTargetProject` doubles as the ownership check: it throws when the
-  // caller does not own the requested project.
-  const targetProject = await resolveTargetProject(projectId, userId, projectsRepo);
+  // session is not allowed to touch the requested project.
+  const targetProject = await resolveTargetProject(projectId, scope, projectsRepo);
 
   const invoices = await invoicesRepo.list({
     projectId: targetProject.id,

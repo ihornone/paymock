@@ -4,7 +4,12 @@ import { InvoicesRepository } from '@/server/db/invoices.repository';
 import { WebhooksRepository } from '@/server/db/webhooks.repository';
 import { getRequestUserId } from '@/server/auth/user';
 import { findProjectByToken } from '@/server/auth/token-cache';
+import {
+  isPersonalAccessToken,
+  verifyPersonalAccessToken,
+} from '@/server/auth/personal-access-token';
 import { MCP_TOOLS, executeMcpTool } from '@/features/mcp/tools';
+import type { McpScope } from '@/features/mcp/handlers/projects.handler';
 import { checkRateLimit, getClientIp } from '@/server/rate-limit';
 import type { Project } from '@/shared/types/models';
 
@@ -108,7 +113,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const rawToken = extractToken(req);
-  let userId = getRequestUserId(req);
+  let userId = await getRequestUserId(req);
   const corsHeaders = buildCorsHeaders(req);
 
   const projectsRepo = new ProjectsRepository();
@@ -235,15 +240,24 @@ export async function POST(req: NextRequest) {
   // resolved. The protocol methods above (`server/discover`, `initialize`,
   // `notifications/*`, `ping`) never reach this point and therefore never
   // cost a database query — a full MCP handshake is now 0 queries.
+  // Resolve the authorization scope of this session.
+  //
+  // A **user token** (`pmk_usr_…`) or a Clerk session scopes the session to
+  // every project the user owns. A **project token** (`pmk_live_…`) scopes it
+  // to that single project — which is the primary way merchants use the MCP
+  // server, and it must work even when the project has no `user_id` yet.
+  let scope: McpScope = { userId: null, projectId: null };
+
   if (rawToken) {
-    if (rawToken.startsWith('pmk_usr_')) {
-      userId = rawToken.replace('pmk_usr_', '').trim();
-    } else if (rawToken.startsWith('user_')) {
-      userId = rawToken.trim();
+    if (isPersonalAccessToken(rawToken)) {
+      // A personal access token is only accepted when it exists and is not
+      // revoked — the prefix alone grants nothing.
+      scope.userId = await verifyPersonalAccessToken(rawToken);
     } else {
       const foundProject = await findProjectByToken(rawToken, projectsRepo);
       if (foundProject) {
         defaultProject = foundProject;
+        scope.projectId = foundProject.id;
         if (!userId && foundProject.user_id) {
           userId = foundProject.user_id;
         }
@@ -251,8 +265,13 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // If no user context and no project found from token, return 401
-  if (!userId && !defaultProject) {
+  // A Clerk session (or a user token) scopes by user.
+  if (!scope.userId && !scope.projectId && userId) {
+    scope.userId = userId;
+  }
+
+  // If no scope could be resolved, return 401
+  if (!scope.userId && !scope.projectId) {
     return NextResponse.json(
       {
         jsonrpc: '2.0',
@@ -266,10 +285,6 @@ export async function POST(req: NextRequest) {
       { status: 401, headers: corsHeaders }
     );
   }
-
-  // The owning user id used for every tenant-scoped query. A project token
-  // carries its own `user_id`, so it can be resolved from either source.
-  const effectiveUserId = userId || defaultProject?.user_id || '';
 
   if (method === 'tools/list') {
     return NextResponse.json(
@@ -293,7 +308,7 @@ export async function POST(req: NextRequest) {
       const result = await executeMcpTool({
         toolName,
         args,
-        userId: effectiveUserId || 'anonymous',
+        scope,
         origin,
         projectsRepo,
         invoicesRepo,
@@ -325,7 +340,7 @@ export async function POST(req: NextRequest) {
 
   // 6. RESOURCES/LIST
   if (method === 'resources/list') {
-    const ownedProjects = await projectsRepo.list(effectiveUserId);
+    const ownedProjects = await projectsRepo.list(scope.userId ?? '');
     const resources = [
       {
         uri: 'paymock://projects',
@@ -375,7 +390,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (uri === 'paymock://projects') {
-      const ownedProjects = await projectsRepo.list(effectiveUserId);
+      const ownedProjects = await projectsRepo.list(scope.userId ?? '');
       return NextResponse.json(
         {
           jsonrpc: '2.0',
@@ -398,7 +413,7 @@ export async function POST(req: NextRequest) {
     if (statsMatch) {
       const pId = statsMatch[1];
       // Ownership is enforced inside the JOIN — one query, no separate check.
-      const stats = await invoicesRepo.countStatsForUser(pId, effectiveUserId);
+      const stats = await invoicesRepo.countStatsForUser(pId, scope.userId ?? '');
       if (!stats) {
         return NextResponse.json(
           {
@@ -431,7 +446,7 @@ export async function POST(req: NextRequest) {
     if (recentInvoicesMatch) {
       const pId = recentInvoicesMatch[1];
       // Ownership is enforced inside the JOIN — one query, no separate check.
-      const invoices = await invoicesRepo.listRecentForUser(pId, effectiveUserId, 10);
+      const invoices = await invoicesRepo.listRecentForUser(pId, scope.userId ?? '', 10);
       if (!invoices) {
         return NextResponse.json(
           {

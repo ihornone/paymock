@@ -1,12 +1,23 @@
 import { NextRequest } from 'next/server';
+import {
+  isPersonalAccessToken,
+  verifyPersonalAccessToken,
+} from '@/server/auth/personal-access-token';
 
-export function getRequestUserId(req: NextRequest): string | null {
-  // 1. Check X-Token for Personal Access Token (pmk_usr_...)
+/**
+ * Resolves the authenticated user of a request.
+ *
+ * Personal access tokens (`pmk_usr_…`) are validated against the database —
+ * they are NOT trusted just because of their prefix. A token is only accepted
+ * when it exists, is not revoked, and resolves to a real user.
+ */
+export async function getRequestUserId(req: NextRequest): Promise<string | null> {
+  // 1. Check X-Token for a Personal Access Token (pmk_usr_...)
   const xToken = req.headers.get('x-token') || req.headers.get('X-Token');
   if (xToken) {
     const trimmed = xToken.trim();
-    if (trimmed.startsWith('pmk_usr_')) {
-      return trimmed.replace('pmk_usr_', '').trim();
+    if (isPersonalAccessToken(trimmed)) {
+      return verifyPersonalAccessToken(trimmed);
     }
   }
 
@@ -14,8 +25,8 @@ export function getRequestUserId(req: NextRequest): string | null {
   const authHeader = req.headers.get('authorization');
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.substring(7).trim();
-    if (token.startsWith('pmk_usr_')) {
-      return token.replace('pmk_usr_', '').trim();
+    if (isPersonalAccessToken(token)) {
+      return verifyPersonalAccessToken(token);
     }
     const userId = parseJwtSub(token);
     if (userId) return userId;

@@ -9,6 +9,7 @@ import { ProjectsRepository } from '@/server/db/projects.repository';
 import { InvoicesRepository } from '@/server/db/invoices.repository';
 import { WebhooksRepository } from '@/server/db/webhooks.repository';
 import { MCP_TOOLS, executeMcpTool } from './tools';
+import type { McpScope } from './handlers/projects.handler';
 
 export interface McpServerConfig {
   baseUrl?: string;
@@ -36,6 +37,13 @@ export function createPaymockMcpServer(config: McpServerConfig = {}) {
 
   const baseUrl = config.baseUrl || process.env.PAYMOCK_URL || 'http://localhost:8787';
   const userId = config.userId || process.env.PAYMOCK_USER_ID || null;
+  const defaultProjectId = config.defaultProjectId || process.env.PAYMOCK_PROJECT_ID || null;
+
+  // The stdio server is configured with explicit environment variables, so it
+  // always resolves to exactly one scope: a single project, or a whole user.
+  const scope: McpScope = defaultProjectId
+    ? { userId: null, projectId: defaultProjectId }
+    : { userId, projectId: null };
 
   // 1. LIST RESOURCES
   server.setRequestHandler(ListResourcesRequestSchema, async () => {
@@ -132,7 +140,7 @@ export function createPaymockMcpServer(config: McpServerConfig = {}) {
       return await executeMcpTool({
         toolName: name,
         args,
-        userId: userId || 'anonymous',
+        scope,
         origin: baseUrl,
         projectsRepo,
         invoicesRepo,

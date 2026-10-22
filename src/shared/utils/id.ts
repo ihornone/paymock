@@ -13,7 +13,7 @@ export const INVOICE_ID_LENGTH = 10;
 export const PROJECT_TOKEN_LENGTH = 24;
 export const WEBHOOK_LOG_ID_LENGTH = 12;
 
-function randomString(alphabet: string, length: number): string {
+export function randomString(alphabet: string, length: number): string {
   const bytes = new Uint8Array(length);
   crypto.getRandomValues(bytes);
 

@@ -17,6 +17,7 @@ import {
   handleGetWebhookLogs,
   handleRetryWebhook,
 } from './handlers/webhooks.handler';
+import type { McpScope } from './handlers/projects.handler';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 export { MCP_TOOLS } from './schemas';
@@ -24,7 +25,11 @@ export { MCP_TOOLS } from './schemas';
 export interface ExecuteMcpToolOptions {
   toolName: string;
   args: any;
-  userId: string;
+  /**
+   * Authorization scope of the session. Exactly one of `userId` / `projectId`
+   * is set — see `McpScope`.
+   */
+  scope: McpScope;
   origin?: string;
   projectsRepo?: ProjectsRepository;
   invoicesRepo?: InvoicesRepository;
@@ -37,15 +42,15 @@ export interface ExecuteMcpToolOptions {
 export async function executeMcpTool({
   toolName,
   args = {},
-  userId,
+  scope,
   origin = 'http://localhost:8787',
   projectsRepo = new ProjectsRepository(),
   invoicesRepo = new InvoicesRepository(),
   webhooksRepo = new WebhooksRepository(),
 }: ExecuteMcpToolOptions): Promise<CallToolResult> {
-  const projectCtx = { userId, projectsRepo };
-  const invoiceCtx = { userId, origin, projectsRepo, invoicesRepo };
-  const webhookCtx = { userId, projectsRepo, invoicesRepo, webhooksRepo };
+  const projectCtx = { scope, projectsRepo };
+  const invoiceCtx = { scope, origin, projectsRepo, invoicesRepo };
+  const webhookCtx = { scope, projectsRepo, invoicesRepo, webhooksRepo };
 
   switch (toolName) {
     // 1. Projects

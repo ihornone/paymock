@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
   const invoicesRepo = new InvoicesRepository();
   const webhooksRepo = new WebhooksRepository();
 
-  const userId = getRequestUserId(req);
+  const userId = await getRequestUserId(req);
   const projectId = req.nextUrl.searchParams.get('projectId');
 
   // If user is not authenticated, return empty list (never expose other users' projects)
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
   }
   const body = parsed.data;
 
-  const userId = getRequestUserId(req);
+  const userId = await getRequestUserId(req);
   const projectsRepo = new ProjectsRepository();
   const newProject = await projectsRepo.create({
     name: body.name.trim(),
@@ -128,7 +128,7 @@ export async function PATCH(req: NextRequest) {
   }
   const body = parsed.data;
 
-  const userId = getRequestUserId(req);
+  const userId = await getRequestUserId(req);
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -159,7 +159,7 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'Project id is required' }, { status: 400 });
   }
 
-  const userId = getRequestUserId(req);
+  const userId = await getRequestUserId(req);
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }

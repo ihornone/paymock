@@ -2,6 +2,17 @@ import assert from 'node:assert';
 
 const BASE_URL = process.env.PAYMOCK_URL || 'http://127.0.0.1:8787';
 const DEMO_TOKEN = 'pmk_demo_test1234567890abcdef';
+const DEMO_USER_ID = 'demo_user';
+
+/**
+ * Account-scoped personal access token.
+ *
+ * The MCP server is documented to be used with the global account token
+ * (`pmk_usr_…`). Provide it via the environment for E2E runs against a
+ * deployed environment; without it the suite falls back to the project token,
+ * which yields a project-scoped session.
+ */
+const ACCOUNT_TOKEN = process.env.PAYMOCK_ACCOUNT_TOKEN || '';
 
 async function runTests() {
   console.log(`🚀 Starting Paymock E2E Verification Tests against ${BASE_URL}...`);
@@ -146,12 +157,16 @@ async function runTests() {
   // [Test 8] Global MCP Server (Account-Scoped Tools)
   console.log('\n[Test 8] Testing Global MCP Server (create_project, list_projects, create_invoice)...');
   
+  // The MCP session token. An account token gives an account-wide session;
+  // a project token gives a project-scoped session.
+  const mcpToken = ACCOUNT_TOKEN || newProjectData.project.token;
+
   // 8.1 List MCP Tools
   const resMcpTools = await fetch(`${BASE_URL}/api/mcp`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': newProjectData.project.token,
+      'X-Token': mcpToken,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -176,7 +191,7 @@ async function runTests() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': newProjectData.project.token,
+      'X-Token': mcpToken,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -207,7 +222,7 @@ async function runTests() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': newProjectData.project.token,
+      'X-Token': mcpToken,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -237,7 +252,7 @@ async function runTests() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': newProjectData.project.token,
+      'X-Token': mcpToken,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -263,7 +278,7 @@ async function runTests() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': newProjectData.project.token,
+      'X-Token': mcpToken,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -283,6 +298,7 @@ async function runTests() {
   assert.notStrictEqual(resetTokenParsed.newToken, createdProjectParsed.project.token);
 
   // 8.5b An oversized basket must be rejected by server-side validation.
+  // The merchant API authenticates with a *project* token.
   const resOversizedBasket = await fetch(`${BASE_URL}/api/merchant/invoice/create`, {
     method: 'POST',
     headers: {
@@ -310,7 +326,7 @@ async function runTests() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': newProjectData.project.token,
+      'X-Token': mcpToken,
       'mcp-method': 'server/discover',
       'mcp-protocol-version': '2026-07-28',
     },
@@ -332,7 +348,7 @@ async function runTests() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': newProjectData.project.token,
+      'X-Token': mcpToken,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -355,7 +371,7 @@ async function runTests() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': newProjectData.project.token,
+      'X-Token': mcpToken,
       'mcp-protocol-version': '2024-11-05',
     },
     body: JSON.stringify({
@@ -374,7 +390,7 @@ async function runTests() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': newProjectData.project.token,
+      'X-Token': mcpToken,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -392,7 +408,7 @@ async function runTests() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': newProjectData.project.token,
+      'X-Token': mcpToken,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -409,7 +425,7 @@ async function runTests() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': newProjectData.project.token,
+      'X-Token': mcpToken,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -428,7 +444,7 @@ async function runTests() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': newProjectData.project.token,
+      'X-Token': mcpToken,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -455,7 +471,7 @@ async function runTests() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': newProjectData.project.token,
+      'X-Token': mcpToken,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -479,7 +495,7 @@ async function runTests() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': newProjectData.project.token,
+      'X-Token': mcpToken,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -529,6 +545,52 @@ async function runTests() {
   });
   assert.strictEqual(resToolNoAuth.status, 401, 'a tool call without a token must be rejected');
   console.log('✅ Tool calls without a token are rejected with 401.');
+
+  // 8.17 A forged personal access token must be rejected.
+  // `pmk_usr_<user id>` used to be accepted on the strength of its prefix,
+  // which let anyone impersonate an account. Only a stored, non-revoked
+  // token hash is accepted now.
+  const resForgedToken = await fetch(`${BASE_URL}/api/mcp`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Token': `pmk_usr_${DEMO_USER_ID}`,
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 17,
+      method: 'tools/call',
+      params: { name: 'list_projects', arguments: {} },
+    }),
+  });
+  assert.strictEqual(
+    resForgedToken.status,
+    401,
+    'a personal access token that is not stored must be rejected'
+  );
+  console.log('✅ Forged personal access token rejected with 401.');
+
+  // 8.18 The same must hold for the account-wide admin API. That endpoint
+  // answers with an empty payload for an unauthenticated caller, so the
+  // guarantee to assert is that no account data leaks.
+  const resForgedAdmin = await fetch(`${BASE_URL}/api/admin/projects`, {
+    headers: { 'X-Token': `pmk_usr_${DEMO_USER_ID}` },
+  });
+  const forgedAdminBody = await resForgedAdmin.json() as {
+    projects?: unknown[];
+    invoices?: unknown[];
+  };
+  assert.deepStrictEqual(
+    forgedAdminBody.projects ?? [],
+    [],
+    'a forged personal access token must not expose any project'
+  );
+  assert.deepStrictEqual(
+    forgedAdminBody.invoices ?? [],
+    [],
+    'a forged personal access token must not expose any invoice'
+  );
+  console.log('✅ Forged personal access token exposes no account data.');
 
   console.log('✅ Global MCP Server verified: dynamic project creation, invoice generation & token reset.');
 

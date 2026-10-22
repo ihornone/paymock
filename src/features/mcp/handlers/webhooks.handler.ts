@@ -2,11 +2,11 @@ import { ProjectsRepository } from '@/server/db/projects.repository';
 import { InvoicesRepository } from '@/server/db/invoices.repository';
 import { WebhooksRepository } from '@/server/db/webhooks.repository';
 import { sendWebhook, isSafeWebhookUrl } from '@/server/webhook';
-import { resolveTargetProject } from './projects.handler';
+import { resolveTargetProject, type McpScope } from './projects.handler';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 export interface WebhooksHandlerContext {
-  userId: string;
+  scope: McpScope;
   projectsRepo: ProjectsRepository;
   invoicesRepo: InvoicesRepository;
   webhooksRepo: WebhooksRepository;
@@ -14,7 +14,7 @@ export interface WebhooksHandlerContext {
 
 export async function handleSimulatePayment(
   args: any,
-  { userId, projectsRepo, invoicesRepo, webhooksRepo }: WebhooksHandlerContext
+  { scope, projectsRepo, invoicesRepo, webhooksRepo }: WebhooksHandlerContext
 ): Promise<CallToolResult> {
   const { invoiceId, action, failureReason } = args || {};
   if (!invoiceId || !action) throw new Error('Параметри invoiceId та action обов\'язкові.');
@@ -24,11 +24,8 @@ export async function handleSimulatePayment(
     throw new Error(`Рахунок ${invoiceId} не знайдено.`);
   }
 
-  // Verify project ownership
-  const project = await projectsRepo.findById(invoice.project_id, userId);
-  if (!project) {
-    throw new Error(`Немає доступу до рахунку ${invoiceId}.`);
-  }
+  // Verify the session is allowed to touch this invoice's project
+  await resolveTargetProject(invoice.project_id, scope, projectsRepo);
 
   let newStatus: any = 'created';
   let paymentInfo: any = null;
@@ -80,13 +77,13 @@ export async function handleSimulatePayment(
 
 export async function handleGetWebhookLogs(
   args: any,
-  { userId, projectsRepo, webhooksRepo }: WebhooksHandlerContext
+  { scope, projectsRepo, webhooksRepo }: WebhooksHandlerContext
 ): Promise<CallToolResult> {
   const { projectId, invoiceId, limit = 15 } = args || {};
 
   // `resolveTargetProject` doubles as the ownership check: it throws when the
-  // caller does not own the requested project.
-  const targetProject = await resolveTargetProject(projectId, userId, projectsRepo);
+  // session is not allowed to touch the requested project.
+  const targetProject = await resolveTargetProject(projectId, scope, projectsRepo);
 
   const logs = await webhooksRepo.list({
     projectId: targetProject.id,
@@ -101,7 +98,7 @@ export async function handleGetWebhookLogs(
 
 export async function handleRetryWebhook(
   args: any,
-  { userId, projectsRepo, invoicesRepo, webhooksRepo }: WebhooksHandlerContext
+  { scope, projectsRepo, invoicesRepo, webhooksRepo }: WebhooksHandlerContext
 ): Promise<CallToolResult> {
   const { invoiceId, customUrl } = args || {};
   if (!invoiceId) throw new Error('Потрібно вказати invoiceId.');
@@ -111,10 +108,8 @@ export async function handleRetryWebhook(
     throw new Error(`Рахунок ${invoiceId} не знайдено.`);
   }
 
-  const project = await projectsRepo.findById(invoice.project_id, userId);
-  if (!project) {
-    throw new Error(`Рахунок ${invoiceId} не належить вашому акаунту.`);
-  }
+  // Verify the session is allowed to touch this invoice's project
+  await resolveTargetProject(invoice.project_id, scope, projectsRepo);
 
   const targetUrl = customUrl || invoice.webhook_url;
   if (!targetUrl) throw new Error('Не вказано webhook_url.');

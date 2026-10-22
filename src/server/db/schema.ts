@@ -99,6 +99,30 @@ export const webhookLogs = sqliteTable(
 );
 
 /**
+ * 4. Personal Access Tokens Table
+ *
+ * The MCP server and the account-wide API are authenticated with a personal
+ * access token. The token itself is never stored — only its SHA-256 hash —
+ * so a database leak cannot be replayed against the API.
+ */
+export const personalAccessTokens = sqliteTable(
+  'personal_access_tokens',
+  {
+    id: text('id').primaryKey(),
+    user_id: text('user_id').notNull(),
+    token_hash: text('token_hash').notNull().unique(),
+    name: text('name').notNull().default('default'),
+    created_at: text('created_at').notNull(),
+    last_used_at: text('last_used_at'),
+    revoked_at: text('revoked_at'),
+  },
+  (table) => [
+    index('idx_pat_user_id').on(table.user_id),
+    index('idx_pat_token_hash').on(table.token_hash),
+  ]
+);
+
+/**
  * Relational definitions for Drizzle Query API
  */
 export const projectsRelations = relations(projects, ({ many }) => ({
