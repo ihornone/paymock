@@ -6,14 +6,16 @@
   "main": "src/index.ts",
   "scripts": {
     "dev": "next dev -p 8787",
-    "build": "NODE_ENV=production next build && NODE_ENV=production opennextjs-cloudflare build --skipBuild",
+    "build": "NODE_ENV=production next build && NODE_ENV=production opennextjs-cloudflare build --skipBuild --dangerouslyUseUnsupportedNextVersion",
     "start": "next start -p 8787",
     "dev:worker": "wrangler dev",
     "deploy": "pnpm run build && wrangler deploy",
     "db:init:local": "wrangler d1 execute paymock-db --local --file=./schema.sql",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types tests/api.test.ts",
-    "mcp": "tsx src/mcp/cli.ts"
+    "test": "pnpm run test:unit && pnpm run test:e2e",
+    "test:unit": "tsx tests/unit/pagination.test.ts && tsx tests/unit/api-client.test.ts && tsx tests/unit/logger-errors.test.ts",
+    "test:e2e": "tsx tests/api.test.ts",
+    "mcp": "tsx src/features/mcp/cli.ts"
   },
   "dependencies": {
     "@clerk/backend": "^3.23.1",

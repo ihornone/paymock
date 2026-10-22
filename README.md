@@ -228,8 +228,14 @@ Paymock має вбудований віддалений хмарний серв
 ```bash
 # 1. Переконайтеся, що dev сервер запущено в іншому терміналі: pnpm dev
 # 2. Запустіть тести:
-pnpm test
+pnpm test            # юніт-тести + E2E
+pnpm run test:unit   # лише юніт-тести (не потребують сервера)
+pnpm run test:e2e    # лише E2E проти запущеного сервера
 ```
+
+> **Змінна оточення:** E2E-тести читають `PAYMOCK_URL` (за замовчуванням
+> `http://127.0.0.1:8787`). Для локального воркера:
+> `PAYMOCK_URL=http://127.0.0.1:8791 pnpm run test:e2e`.
 
 ---
 
@@ -238,27 +244,38 @@ pnpm test
 ```text
 paymock/
 ├── wrangler.toml              # Конфігурація Cloudflare Workers та D1
-├── schema.sql                 # SQL схема таблиць бази даних
+├── schema.sql                 # SQL схема таблиць бази даних + індекси
+├── .env.example               # Шаблон змінних оточення
 ├── package.json
 ├── tsconfig.json
 ├── tests/
-│   └── api.test.ts            # E2E тести відповідності API
+│   ├── api.test.ts            # E2E тести відповідності API
+│   └── unit/                 # Юніт-тести чистої логіки (pagination, api client, logger)
 └── src/
-    ├── index.ts               # Головна точка входу додатку Hono
-    ├── types/
-    │   ├── acquiring.ts       # Типізація офіційного Acquiring API
-    │   ├── models.ts          # Моделі сутностей D1
-    │   └── env.ts             # Cloudflare Bindings
-    ├── shared/
-    │   ├── errors/            # Ієрархія помилок та мапінг відповідей
-    │   ├── logger/            # Структурований JSON логер із маскуванням
-    │   ├── utils/             # Генерація id інвойсів, токенів, форматування валют
-    │   ├── middleware/        # Авторизація X-Token
-    │   └── db/                # Репозиторії D1 (projects, invoices, webhooks)
-    └── features/
-        ├── merchant/          # GET /api/merchant/details
-        ├── invoice/           # /create, /status, /cancel, /remove
-        ├── checkout/          # Сторінка оплати /pay/:invoiceId та симулятор
-        ├── dashboard/         # Кабінет розробника (/, /dashboard, /admin)
-        └── webhook/           # Фоновий диспетчер вебхуків
+    ├── app/                   # Next.js App Router: сторінки та API-роути
+    │   ├── api/               # /api/mcp, /api/merchant/*, /api/admin/*
+    │   ├── docs/  invoices/  pay/  profile/  settings/  webhooks/
+    ├── features/              # Доменні фічі — самодостатні модулі
+    │   ├── checkout/          # Сторінка оплати /pay/:invoiceId та симулятор
+    │   ├── dashboard/         # Кабінет розробника (/, /invoices, /webhooks, /settings)
+    │   ├── docs/              # Довідка та статті
+    │   └── mcp/               # MCP-сервер: схеми інструментів та хендлери
+    ├── server/                # Серверний шар (тільки для сервера)
+    │   ├── db/                # Репозиторії D1 (projects, invoices, webhooks) + схема
+    │   ├── auth/              # Авторизація X-Token + кеш токенів
+    │   ├── webhook.ts         # Диспетчер вебхуків (SSRF-захист)
+    │   └── rate-limit.ts      # Обмеження частоти запитів
+    └── shared/                # Спільний код (використовується 2+ фічями)
+        ├── api/               # Централізований API-клієнт + типізовані ендпоїнти
+        ├── components/ui/     # Базові UI-примітиви (shadcn-стиль)
+        ├── errors/            # Ієрархія помилок з cause chaining
+        ├── hooks/             # useClipboard, useMobile
+        ├── logger/            # Структурований JSON логер із маскуванням
+        ├── services/          # Маппери DTO → доменні моделі
+        ├── types/             # Типізація Acquiring API та моделей D1
+        └── utils/             # Генерація id/токенів, межі пагінації, формати валют
 ```
+
+**Напрям залежностей:** `app → features → shared → зовнішні бібліотеки`.
+`src/server/` — серверний шар-«лист»: він імпортує лише `src/shared/`, і його не
+імпортують ні `shared`, ані `features/`.

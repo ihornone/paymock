@@ -9,19 +9,54 @@ export interface LogContext {
   [key: string]: unknown;
 }
 
-const REDACT_KEYS = new Set([
+/**
+ * Field names whose values must never reach the log output.
+ *
+ * Matches the redaction list used by the API client and error handling skills:
+ * credentials, tokens and personal data.
+ */
+export const REDACTED_KEYS = new Set([
   'x-token',
   'token',
+  'pmk_live_token',
   'authorization',
+  'auth',
+  'password',
+  'secret',
+  'apikey',
+  'api_key',
+  'access_token',
+  'refresh_token',
+  'refreshtoken',
+  'client_secret',
+  'private_key',
   'cardnumber',
+  'card_number',
   'cvv',
   'pan',
-  'secret',
+  'iban',
+  'creditcard',
+  'ssn',
+  'email',
+  'cookie',
+  'set-cookie',
+  'session',
+  'hash',
+  'credential',
+  'encrypted_credentials',
+  'serviceaccountkey',
+  'tenant_id',
 ]);
 
+export const REDACTED_PLACEHOLDER = '[REDACTED]';
+
+function isRedactedKey(key: string): boolean {
+  return REDACTED_KEYS.has(key.toLowerCase());
+}
+
 function sanitizeValue(key: string, value: unknown): unknown {
-  if (typeof key === 'string' && REDACT_KEYS.has(key.toLowerCase())) {
-    return '[REDACTED]';
+  if (isRedactedKey(key)) {
+    return REDACTED_PLACEHOLDER;
   }
   if (typeof value === 'object' && value !== null) {
     if (Array.isArray(value)) {
@@ -36,7 +71,28 @@ function sanitizeValue(key: string, value: unknown): unknown {
   return value;
 }
 
+/**
+ * Structured logger.
+ *
+ * Every entry carries `timestamp`, `level`, `service` and `event`. Secrets are
+ * redacted before serialization.
+ */
 export const logger = {
+  debug(context: LogContext): void {
+    if (process.env.NODE_ENV === 'production' && process.env.LOG_LEVEL !== 'debug') {
+      return;
+    }
+    const sanitized = sanitizeValue('root', context) as LogContext;
+    console.log(
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'DEBUG',
+        service: 'paymock',
+        ...sanitized,
+      })
+    );
+  },
+
   info(context: LogContext): void {
     const sanitized = sanitizeValue('root', context) as LogContext;
     console.log(
@@ -61,6 +117,10 @@ export const logger = {
     );
   },
 
+  /**
+   * 4xx rejections are expected outcomes, not defects — they are logged at
+   * `info` level so that error tracking stays signal-rich.
+   */
   error(context: LogContext): void {
     const sanitized = sanitizeValue('root', context) as LogContext;
     console.error(

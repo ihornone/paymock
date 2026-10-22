@@ -1,11 +1,32 @@
+/**
+ * Identifier generation.
+ *
+ * All random identifiers use `crypto.getRandomValues` — `Math.random()` is not
+ * a CSPRNG and previously produced the merchant `X-Token` credential from only
+ * ~36 bits of entropy.
+ */
+
+const ID_ALPHABET = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+const TOKEN_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
+
+export const INVOICE_ID_LENGTH = 10;
+export const PROJECT_TOKEN_LENGTH = 24;
+export const WEBHOOK_LOG_ID_LENGTH = 12;
+
+function randomString(alphabet: string, length: number): string {
+  const bytes = new Uint8Array(length);
+  crypto.getRandomValues(bytes);
+
+  let out = '';
+  for (let i = 0; i < length; i++) {
+    out += alphabet.charAt(bytes[i] % alphabet.length);
+  }
+  return out;
+}
+
 export function generateInvoiceId(): string {
   // p2_... acquiring invoice ID
-  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let str = 'p2_';
-  for (let i = 0; i < 10; i++) {
-    str += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return str;
+  return `p2_${randomString(ID_ALPHABET, INVOICE_ID_LENGTH)}`;
 }
 
 export function generateProjectId(): string {
@@ -13,21 +34,11 @@ export function generateProjectId(): string {
 }
 
 export function generateProjectToken(): string {
-  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  let str = 'pmk_live_';
-  for (let i = 0; i < 24; i++) {
-    str += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return str;
+  return `pmk_live_${randomString(TOKEN_ALPHABET, PROJECT_TOKEN_LENGTH)}`;
 }
 
 export function generateWebhookLogId(): string {
-  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  let str = 'wh_';
-  for (let i = 0; i < 12; i++) {
-    str += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return str;
+  return `wh_${randomString(TOKEN_ALPHABET, WEBHOOK_LOG_ID_LENGTH)}`;
 }
 
 export function formatCurrencyAmount(cents: number, ccy: number = 980): string {
