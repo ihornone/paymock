@@ -2,6 +2,17 @@ import assert from 'node:assert';
 
 const BASE_URL = process.env.PAYMOCK_URL || 'http://127.0.0.1:8787';
 const DEMO_TOKEN = 'pmk_demo_test1234567890abcdef';
+const DEMO_USER_ID = 'demo_user';
+
+/**
+ * Account-scoped personal access token.
+ *
+ * The MCP server is documented to be used with the global account token
+ * (`pmk_usr_…`). Provide it via the environment for E2E runs against a
+ * deployed environment; without it the suite falls back to the project token,
+ * which yields a project-scoped session.
+ */
+const ACCOUNT_TOKEN = process.env.PAYMOCK_ACCOUNT_TOKEN || '';
 
 async function runTests() {
   console.log(`🚀 Starting Paymock E2E Verification Tests against ${BASE_URL}...`);
@@ -146,12 +157,16 @@ async function runTests() {
   // [Test 8] Global MCP Server (Account-Scoped Tools)
   console.log('\n[Test 8] Testing Global MCP Server (create_project, list_projects, create_invoice)...');
   
+  // The MCP session token. An account token gives an account-wide session;
+  // a project token gives a project-scoped session.
+  const mcpToken = ACCOUNT_TOKEN || newProjectData.project.token;
+
   // 8.1 List MCP Tools
   const resMcpTools = await fetch(`${BASE_URL}/api/mcp`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': newProjectData.project.token,
+      'X-Token': mcpToken,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -176,7 +191,7 @@ async function runTests() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': newProjectData.project.token,
+      'X-Token': mcpToken,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -207,7 +222,7 @@ async function runTests() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': newProjectData.project.token,
+      'X-Token': mcpToken,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -237,7 +252,7 @@ async function runTests() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': newProjectData.project.token,
+      'X-Token': mcpToken,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -263,7 +278,7 @@ async function runTests() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': newProjectData.project.token,
+      'X-Token': mcpToken,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -282,12 +297,36 @@ async function runTests() {
   assert.ok(resetTokenParsed.newToken.startsWith('pmk_live_'));
   assert.notStrictEqual(resetTokenParsed.newToken, createdProjectParsed.project.token);
 
+  // 8.5b An oversized basket must be rejected by server-side validation.
+  // The merchant API authenticates with a *project* token.
+  const resOversizedBasket = await fetch(`${BASE_URL}/api/merchant/invoice/create`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Token': newProjectData.project.token,
+    },
+    body: JSON.stringify({
+      amount: 1000,
+      ccy: 980,
+      merchantPaymInfo: {
+        destination: 'Oversized basket',
+        basketOrder: Array.from({ length: 200 }, () => ({ name: 'Item', qty: 1, sum: 100 })),
+      },
+    }),
+  });
+  assert.strictEqual(
+    resOversizedBasket.status,
+    400,
+    'a basket with more than 50 items must be rejected'
+  );
+  console.log('✅ Oversized basket rejected by server-side validation.');
+
   // 8.6 Test server/discover probe (Modern MCP protocol 2026-07-28)
   const resDiscover = await fetch(`${BASE_URL}/api/mcp`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': newProjectData.project.token,
+      'X-Token': mcpToken,
       'mcp-method': 'server/discover',
       'mcp-protocol-version': '2026-07-28',
     },
@@ -309,7 +348,7 @@ async function runTests() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': newProjectData.project.token,
+      'X-Token': mcpToken,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -332,7 +371,7 @@ async function runTests() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': newProjectData.project.token,
+      'X-Token': mcpToken,
       'mcp-protocol-version': '2024-11-05',
     },
     body: JSON.stringify({
@@ -351,7 +390,7 @@ async function runTests() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': newProjectData.project.token,
+      'X-Token': mcpToken,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -369,7 +408,7 @@ async function runTests() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': newProjectData.project.token,
+      'X-Token': mcpToken,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -386,7 +425,7 @@ async function runTests() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': newProjectData.project.token,
+      'X-Token': mcpToken,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -405,7 +444,7 @@ async function runTests() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': newProjectData.project.token,
+      'X-Token': mcpToken,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -425,6 +464,133 @@ async function runTests() {
   assert.strictEqual(resOptions.status, 204);
   assert.strictEqual(resOptions.headers.get('Access-Control-Allow-Origin'), '*');
   console.log('✅ MCP OPTIONS CORS preflight verified successfully.');
+
+  // 8.13 A negative `limit` must be clamped, not turned into an unbounded scan.
+  // A negative LIMIT makes Drizzle drop the LIMIT clause entirely.
+  const resNegativeLimit = await fetch(`${BASE_URL}/api/mcp`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Token': mcpToken,
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 12,
+      method: 'tools/call',
+      params: { name: 'list_invoices', arguments: { limit: -1 } },
+    }),
+  });
+  assert.strictEqual(resNegativeLimit.status, 200);
+  const negativeLimitText = await resNegativeLimit.text();
+  const negativeLimitResult = JSON.parse(negativeLimitText) as any;
+  const negativeLimitRows = JSON.parse(negativeLimitResult.result.content[0].text) as any[];
+  assert.ok(
+    negativeLimitRows.length <= 200,
+    `a negative limit must be clamped to at most 200 rows, got ${negativeLimitRows.length}`
+  );
+  console.log(`✅ Negative limit clamped to ${negativeLimitRows.length} rows (no unbounded scan).`);
+
+  // 8.14 An oversized `limit` must be capped as well.
+  const resHugeLimit = await fetch(`${BASE_URL}/api/mcp`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Token': mcpToken,
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 13,
+      method: 'tools/call',
+      params: { name: 'list_invoices', arguments: { limit: 1_000_000 } },
+    }),
+  });
+  assert.strictEqual(resHugeLimit.status, 200);
+  const hugeLimitResult = (await resHugeLimit.json()) as any;
+  const hugeLimitRows = JSON.parse(hugeLimitResult.result.content[0].text) as any[];
+  assert.ok(
+    hugeLimitRows.length <= 200,
+    `an oversized limit must be capped at 200 rows, got ${hugeLimitRows.length}`
+  );
+  console.log(`✅ Oversized limit capped to ${hugeLimitRows.length} rows.`);
+
+  // 8.15 Protocol methods must work without touching the database, so they
+  // must succeed even without a token.
+  const resPingNoAuth = await fetch(`${BASE_URL}/api/mcp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 14, method: 'ping' }),
+  });
+  assert.strictEqual(resPingNoAuth.status, 200, 'ping must not require a token');
+  const pingNoAuthData = (await resPingNoAuth.json()) as any;
+  assert.deepStrictEqual(pingNoAuthData.result, {});
+
+  const resDiscoverNoAuth = await fetch(`${BASE_URL}/api/mcp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'mcp-method': 'server/discover' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 15, method: 'server/discover' }),
+  });
+  assert.strictEqual(resDiscoverNoAuth.status, 200, 'server/discover must not require a token');
+  console.log('✅ Protocol methods work without authentication (zero DB queries).');
+
+  // 8.16 A tool call without a token must still be rejected.
+  const resToolNoAuth = await fetch(`${BASE_URL}/api/mcp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 16,
+      method: 'tools/call',
+      params: { name: 'list_projects', arguments: {} },
+    }),
+  });
+  assert.strictEqual(resToolNoAuth.status, 401, 'a tool call without a token must be rejected');
+  console.log('✅ Tool calls without a token are rejected with 401.');
+
+  // 8.17 A forged personal access token must be rejected.
+  // `pmk_usr_<user id>` used to be accepted on the strength of its prefix,
+  // which let anyone impersonate an account. Only a stored, non-revoked
+  // token hash is accepted now.
+  const resForgedToken = await fetch(`${BASE_URL}/api/mcp`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Token': `pmk_usr_${DEMO_USER_ID}`,
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 17,
+      method: 'tools/call',
+      params: { name: 'list_projects', arguments: {} },
+    }),
+  });
+  assert.strictEqual(
+    resForgedToken.status,
+    401,
+    'a personal access token that is not stored must be rejected'
+  );
+  console.log('✅ Forged personal access token rejected with 401.');
+
+  // 8.18 The same must hold for the account-wide admin API. That endpoint
+  // answers with an empty payload for an unauthenticated caller, so the
+  // guarantee to assert is that no account data leaks.
+  const resForgedAdmin = await fetch(`${BASE_URL}/api/admin/projects`, {
+    headers: { 'X-Token': `pmk_usr_${DEMO_USER_ID}` },
+  });
+  const forgedAdminBody = await resForgedAdmin.json() as {
+    projects?: unknown[];
+    invoices?: unknown[];
+  };
+  assert.deepStrictEqual(
+    forgedAdminBody.projects ?? [],
+    [],
+    'a forged personal access token must not expose any project'
+  );
+  assert.deepStrictEqual(
+    forgedAdminBody.invoices ?? [],
+    [],
+    'a forged personal access token must not expose any invoice'
+  );
+  console.log('✅ Forged personal access token exposes no account data.');
 
   console.log('✅ Global MCP Server verified: dynamic project creation, invoice generation & token reset.');
 

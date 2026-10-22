@@ -1,16 +1,31 @@
-import type { ErrorResponse } from '../../types/acquiring';
+import type { ErrorResponse } from '../types/acquiring';
 
+/**
+ * Base application error.
+ *
+ * Error classes are transport-agnostic: the HTTP status code is applied at the
+ * boundary, not baked into the domain layer. The original error is preserved
+ * through `cause` so stack traces survive abstraction layers.
+ */
 export class AcquiringError extends Error {
   public readonly statusCode: number;
   public readonly errCode: string;
   public readonly errText: string;
+  public override readonly cause?: unknown;
 
-  constructor(statusCode: number, errCode: string, errText: string) {
+  constructor(
+    statusCode: number,
+    errCode: string,
+    errText: string,
+    options?: { cause?: unknown }
+  ) {
     super(errText);
     this.name = 'AcquiringError';
     this.statusCode = statusCode;
     this.errCode = errCode;
     this.errText = errText;
+    this.cause = options?.cause;
+    Object.setPrototypeOf(this, new.target.prototype);
   }
 
   toResponse(): ErrorResponse {
@@ -58,8 +73,30 @@ export class TooManyRequestsError extends AcquiringError {
 }
 
 export class InternalError extends AcquiringError {
-  constructor(errText: string = 'internal server error', errCode: string = 'INTERNAL_ERROR') {
-    super(500, errCode, errText);
+  constructor(
+    errText: string = 'internal server error',
+    errCode: string = 'INTERNAL_ERROR',
+    options?: { cause?: unknown }
+  ) {
+    super(500, errCode, errText, options);
+  }
+}
+
+export class UnauthorizedError extends AcquiringError {
+  constructor(errText: string = 'authentication required') {
+    super(401, 'UNAUTHORIZED', errText);
+  }
+}
+
+export class PersistenceError extends AcquiringError {
+  constructor(errText: string = 'database error', options?: { cause?: unknown }) {
+    super(500, 'DATABASE_ERROR', errText, options);
+  }
+}
+
+export class ExternalServiceError extends AcquiringError {
+  constructor(errText: string = 'external service unavailable', options?: { cause?: unknown }) {
+    super(502, 'EXTERNAL_SERVICE_ERROR', errText, options);
   }
 }
 

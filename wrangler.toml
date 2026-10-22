@@ -11,7 +11,7 @@ binding = "ASSETS"
 [[d1_databases]]
 binding = "DB"
 database_name = "paymock-db"
-database_id = "29ae1343-80a1-46ff-a3c6-b521dcfb9e5a"
+database_id = "263234ee-228e-4b8c-81a9-57777ad70bbc"
 
 [observability]
 enabled = true
