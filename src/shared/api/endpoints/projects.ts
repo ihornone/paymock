@@ -20,6 +20,14 @@ export interface CreateProjectInput {
 export interface CreatedProject {
   ok: boolean;
   project: Project;
+  /**
+   * The merchant token and the webhook signing secret.
+   *
+   * They are returned exactly once — only their hashes are stored, so a lost
+   * token must be rotated rather than looked up.
+   */
+  token: string;
+  webhookSecret: string;
 }
 
 /**
@@ -66,9 +74,12 @@ export const projectsApi = {
     }),
 
   resetToken: (projectId: string, options?: ApiRequestOptions) =>
-    apiRequest<{ success: boolean; project: Project }>('/api/admin/projects/reset-token', {
-      ...options,
-      method: 'POST',
-      body: { projectId },
-    }),
+    apiRequest<{ success: boolean; project: Project; token: string }>(
+      '/api/admin/projects/reset-token',
+      {
+        ...options,
+        method: 'POST',
+        body: { projectId },
+      }
+    ),
 };

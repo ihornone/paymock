@@ -24,12 +24,27 @@ interface DashboardContextType {
   handleUpdateProjectSettings: (id: string, settings: Partial<Project>) => Promise<boolean>;
   handleDeleteProject: (id: string, name: string) => Promise<boolean>;
   handleResetToken: (projectId: string) => Promise<string | null>;
+  /**
+   * Credentials issued by the last create/rotate call.
+   *
+   * The server stores only their hashes, so they are available here exactly
+   * once — the UI shows them and then drops them.
+   */
+  issuedCredentials: IssuedCredentials | null;
+  clearIssuedCredentials: () => void;
   copiedKey: string | null;
   copyToClipboard: (text: string, key: string) => void;
   hasProjects: boolean;
   isUserAuthenticated: boolean;
   user: any;
   isLoaded: boolean;
+}
+
+export interface IssuedCredentials {
+  projectId: string;
+  projectName: string;
+  token: string;
+  webhookSecret: string;
 }
 
 const DashboardContext = React.createContext<DashboardContextType | null>(null);
@@ -78,6 +93,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = React.useState(!hasValidCache);
   const [isCreateOpen, setIsCreateOpen] = React.useState(false);
   const [copiedKey, setCopiedKey] = React.useState<string | null>(null);
+  const [issuedCredentials, setIssuedCredentials] = React.useState<IssuedCredentials | null>(null);
 
   // The Clerk session cookie authenticates the request in production.
   // `x-user-id` is only honoured outside production and keeps local
@@ -173,6 +189,14 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       await fetchData();
       if (newProj?.project?.id) {
         setSelectedProjectId(newProj.project.id);
+        // The token and the webhook secret are shown exactly once — the
+        // server keeps only their hashes.
+        setIssuedCredentials({
+          projectId: newProj.project.id,
+          projectName: newProj.project.name,
+          token: newProj.token,
+          webhookSecret: newProj.webhookSecret,
+        });
       }
       return newProj?.project ?? null;
     } catch (err) {
@@ -251,7 +275,14 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       const data = await projectsApi.resetToken(projectId, { headers: authHeaders });
       memoryCache = null;
       await fetchData();
-      return data.project?.token || null;
+      // The rotated token is returned once, like the one from a creation.
+      setIssuedCredentials({
+        projectId: data.project?.id || projectId,
+        projectName: data.project?.name || '',
+        token: data.token,
+        webhookSecret: '',
+      });
+      return data.token || null;
     } catch (err) {
       if (err instanceof ApiError && err.isExpectedRejection) {
         console.info('Token reset rejected:', err.code || err.kind);
@@ -290,6 +321,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         handleUpdateProjectSettings,
         handleDeleteProject,
         handleResetToken,
+        issuedCredentials,
+        clearIssuedCredentials: () => setIssuedCredentials(null),
         copiedKey,
         copyToClipboard,
         hasProjects,

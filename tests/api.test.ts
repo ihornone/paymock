@@ -1,8 +1,15 @@
 import assert from 'node:assert';
 
 const BASE_URL = process.env.PAYMOCK_URL || 'http://127.0.0.1:8787';
-const DEMO_TOKEN = 'pmk_demo_test1234567890abcdef';
-const DEMO_USER_ID = 'demo_user';
+
+/**
+ * The merchant token of the demo project.
+ *
+ * It is generated per installation (`pnpm db:seed:demo`) and never stored in
+ * plaintext, so it must be passed in through the environment.
+ */
+const DEMO_TOKEN = process.env.PAYMOCK_DEMO_TOKEN || '';
+const DEMO_USER_ID = process.env.PAYMOCK_USER_ID || 'demo_user';
 
 /**
  * Account-scoped personal access token.
@@ -13,6 +20,17 @@ const DEMO_USER_ID = 'demo_user';
  * which yields a project-scoped session.
  */
 const ACCOUNT_TOKEN = process.env.PAYMOCK_ACCOUNT_TOKEN || '';
+
+/**
+ * The credential of the account-scoped API.
+ *
+ * Outside production the development header stands in for a session; in
+ * production only a personal access token is accepted.
+ */
+function accountAuthHeaders(): Record<string, string> {
+  if (ACCOUNT_TOKEN) return { 'X-Token': ACCOUNT_TOKEN };
+  return { 'x-user-id': DEMO_USER_ID };
+}
 
 async function runTests() {
   console.log(`🚀 Starting Paymock E2E Verification Tests against ${BASE_URL}...`);
@@ -131,23 +149,26 @@ async function runTests() {
   console.log('\n[Test 7] Testing multi-project creation and tenant isolation...');
   const resNewProject = await fetch(`${BASE_URL}/api/admin/projects`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...accountAuthHeaders() },
     body: JSON.stringify({
       name: 'E2E Тестовий Магазин',
       edrpou: '11223344',
     }),
   });
-  assert.strictEqual(resNewProject.status, 200);
+  // 201 Created — the project (and its one-time token) are returned.
+  assert.strictEqual(resNewProject.status, 201);
   const newProjectData = await resNewProject.json() as {
     ok: boolean;
-    project: { id: string; token: string; name: string };
+    project: { id: string; name: string };
+    // The token is returned exactly once — at creation.
+    token: string;
   };
   assert.strictEqual(newProjectData.ok, true);
-  assert.ok(newProjectData.project.token.startsWith('pmk_live_'));
+  assert.ok(newProjectData.token.startsWith('pmk_live_'));
 
   // Test details with new project token
   const resCustomDetails = await fetch(`${BASE_URL}/api/merchant/details`, {
-    headers: { 'X-Token': newProjectData.project.token },
+    headers: { 'X-Token': newProjectData.token },
   });
   assert.strictEqual(resCustomDetails.status, 200);
   const customDetails = await resCustomDetails.json() as { merchantName: string };
@@ -159,7 +180,7 @@ async function runTests() {
   
   // The MCP session token. An account token gives an account-wide session;
   // a project token gives a project-scoped session.
-  const mcpToken = ACCOUNT_TOKEN || newProjectData.project.token;
+  const mcpToken = ACCOUNT_TOKEN || newProjectData.token;
 
   // 8.1 List MCP Tools
   const resMcpTools = await fetch(`${BASE_URL}/api/mcp`, {
@@ -207,15 +228,36 @@ async function runTests() {
     }),
   });
   assert.strictEqual(resCreateProjectMcp.status, 200);
-  const createProjectResult = await resCreateProjectMcp.json() as {
-    result: { content: Array<{ text: string }> };
-  };
-  const createdProjectParsed = JSON.parse(createProjectResult.result.content[0].text);
-  assert.ok(createdProjectParsed.project.id);
-  assert.ok(createdProjectParsed.project.token.startsWith('pmk_live_'));
-  assert.strictEqual(createdProjectParsed.project.name, 'AI Автоматичний Магазин');
 
-  const mcpProjectId = createdProjectParsed.project.id;
+  const createProjectPayload = await resCreateProjectMcp.json() as {
+    result?: { content: Array<{ text: string }> };
+    error?: { code: number; message: string };
+  };
+
+  if (!ACCOUNT_TOKEN) {
+    // A project-scoped session must not be able to create new projects —
+    // that would let any merchant token mint projects of the account.
+    assert.ok(
+      createProjectPayload.error,
+      'a project-scoped MCP session cannot create a project'
+    );
+    assert.strictEqual(
+      createProjectPayload.result,
+      undefined,
+      'no project is created by a project-scoped session'
+    );
+    console.log('✅ Project-scoped MCP session is refused for create_project.');
+  } else {
+    const createdProjectParsed = JSON.parse(createProjectPayload.result!.content[0].text);
+    assert.ok(createdProjectParsed.project.id);
+    assert.ok(createdProjectParsed.token.startsWith('pmk_live_'));
+    assert.strictEqual(createdProjectParsed.project.name, 'AI Автоматичний Магазин');
+    console.log('✅ Account-scoped MCP session created a project.');
+  }
+
+  const mcpProjectId = ACCOUNT_TOKEN
+    ? (JSON.parse((createProjectPayload as { result: { content: Array<{ text: string }> } }).result.content[0].text) as { project: { id: string } }).project.id
+    : newProjectData.project.id;
 
   // 8.3 Create Invoice in the newly created project via MCP
   const resCreateInvoiceMcp = await fetch(`${BASE_URL}/api/mcp`, {
@@ -295,15 +337,24 @@ async function runTests() {
   assert.strictEqual(resResetTokenMcp.status, 200);
   const resetTokenParsed = JSON.parse((await resResetTokenMcp.json() as any).result.content[0].text);
   assert.ok(resetTokenParsed.newToken.startsWith('pmk_live_'));
-  assert.notStrictEqual(resetTokenParsed.newToken, createdProjectParsed.project.token);
+  assert.notStrictEqual(
+    resetTokenParsed.newToken,
+    newProjectData.token,
+    'the rotated token differs from the previous one'
+  );
+
+  // The rotated token replaces the previous one: every later MCP call
+  // must use it, the old token is dead by design.
+  const mcpLiveToken = ACCOUNT_TOKEN || resetTokenParsed.newToken;
 
   // 8.5b An oversized basket must be rejected by server-side validation.
-  // The merchant API authenticates with a *project* token.
+  // The merchant API authenticates with a *project* token — the one issued by
+  // the rotation above: the previous token is dead by design.
   const resOversizedBasket = await fetch(`${BASE_URL}/api/merchant/invoice/create`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': newProjectData.project.token,
+      'X-Token': resetTokenParsed.newToken,
     },
     body: JSON.stringify({
       amount: 1000,
@@ -326,7 +377,7 @@ async function runTests() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': mcpToken,
+      'X-Token': mcpLiveToken,
       'mcp-method': 'server/discover',
       'mcp-protocol-version': '2026-07-28',
     },
@@ -348,7 +399,7 @@ async function runTests() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': mcpToken,
+      'X-Token': mcpLiveToken,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -371,7 +422,7 @@ async function runTests() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': mcpToken,
+      'X-Token': mcpLiveToken,
       'mcp-protocol-version': '2024-11-05',
     },
     body: JSON.stringify({
@@ -390,7 +441,7 @@ async function runTests() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': mcpToken,
+      'X-Token': mcpLiveToken,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -408,7 +459,7 @@ async function runTests() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': mcpToken,
+      'X-Token': mcpLiveToken,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -425,7 +476,7 @@ async function runTests() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': mcpToken,
+      'X-Token': mcpLiveToken,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -444,7 +495,7 @@ async function runTests() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': mcpToken,
+      'X-Token': mcpLiveToken,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -471,7 +522,7 @@ async function runTests() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': mcpToken,
+      'X-Token': mcpLiveToken,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -495,7 +546,7 @@ async function runTests() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Token': mcpToken,
+      'X-Token': mcpLiveToken,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',

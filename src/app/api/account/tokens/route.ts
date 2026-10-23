@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getRequestUserId } from '@/server/auth/user';
+import { guardAdminMutation, guardAdminRead } from '@/server/auth/admin-guard';
+import { recordAudit } from '@/server/db/audit.repository';
 import {
   createPersonalAccessToken,
   listPersonalAccessTokens,
   revokePersonalAccessTokens,
 } from '@/server/auth/personal-access-token';
 import { logger } from '@/shared/logger';
+
+const NO_STORE = { 'Cache-Control': 'private, no-store' } as const;
 
 /**
  * Personal access token management.
@@ -14,24 +17,25 @@ import { logger } from '@/shared/logger';
  * SHA-256 hash is stored, so the value cannot be recovered later.
  */
 export async function GET(req: NextRequest) {
-  const userId = await getRequestUserId(req);
-  if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const guard = await guardAdminRead(req, 'account.tokens.list');
+  if (!guard.ok) return guard.error;
 
-  const tokens = await listPersonalAccessTokens(userId);
+  const { actor } = guard.context;
+  const tokens = await listPersonalAccessTokens(actor.userId);
 
-  return NextResponse.json(
-    { tokens },
-    { headers: { 'Cache-Control': 'private, no-store' } }
-  );
+  return NextResponse.json({ tokens }, { headers: NO_STORE });
 }
 
 export async function POST(req: NextRequest) {
-  const userId = await getRequestUserId(req);
-  if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const guard = await guardAdminMutation(req, {
+    action: 'account.token.issue',
+    targetType: 'personal_access_token',
+    rateLimitBucket: 'account.token.issue',
+    limit: 10,
+  });
+  if (!guard.ok) return guard.error;
+
+  const { actor, ip, userAgent } = guard.context;
 
   let name = 'default';
   try {
@@ -43,9 +47,21 @@ export async function POST(req: NextRequest) {
     // An empty body is fine — the default token name is used.
   }
 
-  const created = await createPersonalAccessToken(userId, name);
+  const created = await createPersonalAccessToken(actor.userId, name);
 
-  logger.info({ event: 'personal_access_token_issued', userId, tokenName: name });
+  await recordAudit({
+    actorUserId: actor.userId,
+    actorKind: actor.kind,
+    action: 'account.token.issue',
+    targetType: 'personal_access_token',
+    targetId: created.id,
+    ip,
+    userAgent,
+    result: 'success',
+    detail: name,
+  });
+
+  logger.info({ event: 'personal_access_token_issued', userId: actor.userId, tokenName: name });
 
   return NextResponse.json(
     {
@@ -55,18 +71,34 @@ export async function POST(req: NextRequest) {
       name,
       createdAt: created.createdAt,
     },
-    { status: 201, headers: { 'Cache-Control': 'private, no-store' } }
+    { status: 201, headers: NO_STORE }
   );
 }
 
 export async function DELETE(req: NextRequest) {
-  const userId = await getRequestUserId(req);
-  if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const guard = await guardAdminMutation(req, {
+    action: 'account.token.revoke',
+    targetType: 'personal_access_token',
+    rateLimitBucket: 'account.token.revoke',
+    limit: 30,
+  });
+  if (!guard.ok) return guard.error;
+
+  const { actor, ip, userAgent } = guard.context;
 
   const name = req.nextUrl.searchParams.get('name') || undefined;
-  const revoked = await revokePersonalAccessTokens(userId, name);
+  const revoked = await revokePersonalAccessTokens(actor.userId, name);
 
-  return NextResponse.json({ success: true, revoked });
+  await recordAudit({
+    actorUserId: actor.userId,
+    actorKind: actor.kind,
+    action: 'account.token.revoke',
+    targetType: 'personal_access_token',
+    ip,
+    userAgent,
+    result: 'success',
+    detail: name ?? 'all',
+  });
+
+  return NextResponse.json({ success: true, revoked }, { headers: NO_STORE });
 }

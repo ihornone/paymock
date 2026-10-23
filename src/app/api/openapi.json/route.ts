@@ -1,16 +1,114 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+/**
+ * The public OpenAPI document.
+ *
+ * Only the merchant surface is described here: it is the contract an
+ * integrator actually needs, and it exposes no account-scoped endpoint. The
+ * admin/account/MCP endpoints live in a separate, session-guarded document
+ * (`/api/openapi.internal.json`) — listing them here would hand an anonymous
+ * visitor a map of the internal API.
+ *
+ * The document is assembled from the local types below on purpose: importing
+ * anything from `src/server/**` would pull the database and the auth layer
+ * into a route that is served to the public.
+ */
+
+type JsonSchema = Record<string, unknown>;
+
+type SecurityScheme = {
+  type: 'apiKey';
+  in: 'header' | 'cookie';
+  name: string;
+  description?: string;
+};
+
+type SecurityRequirement = Record<string, string[]>;
+
+interface OpenApiParameter {
+  name: string;
+  in: 'header' | 'query' | 'path' | 'cookie';
+  required?: boolean;
+  description?: string;
+  schema: JsonSchema;
+  example?: unknown;
+}
+
+interface OpenApiRequestBody {
+  required?: boolean;
+  content: Record<string, { schema: JsonSchema }>;
+}
+
+interface OpenApiResponse {
+  description: string;
+  content?: Record<string, { schema: JsonSchema }>;
+}
+
+interface OpenApiOperation {
+  summary: string;
+  description?: string;
+  tags?: string[];
+  parameters?: OpenApiParameter[];
+  requestBody?: OpenApiRequestBody;
+  responses: Record<string, OpenApiResponse>;
+  security?: SecurityRequirement[];
+}
+
+interface OpenApiDocument {
+  openapi: string;
+  info: {
+    title: string;
+    version: string;
+    description?: string;
+  };
+  servers: { url: string; description?: string }[];
+  tags?: { name: string; description?: string }[];
+  paths: Record<string, Record<string, OpenApiOperation>>;
+  components?: {
+    securitySchemes?: Record<string, SecurityScheme>;
+  };
+  security?: SecurityRequirement[];
+}
+
+const NO_STORE = { 'Cache-Control': 'private, no-store' } as const;
+
+/**
+ * The merchant credential.
+ *
+ * It is declared as a security scheme (instead of a plain header parameter)
+ * so that the generated clients attach it automatically and so that the
+ * document states unambiguously which operations are protected.
+ */
+const TOKEN_SECURITY: SecurityRequirement = { XToken: [] };
+
+/**
+ * The token header, kept as an explicit parameter as well: some integrators
+ * read the parameters section and never look at the security schemes.
+ *
+ * The value is a placeholder — a real project token must never end up in a
+ * document that is served to anybody.
+ */
+const TOKEN_HEADER_PARAM: OpenApiParameter = {
+  name: 'X-Token',
+  in: 'header',
+  required: true,
+  description: 'Токен проєкту Paymock. Схема безпеки — XToken.',
+  schema: { type: 'string' },
+  example: '<X-Token>',
+};
+
 export async function GET(req: NextRequest) {
   const host = req.headers.get('host') || 'localhost:8787';
   const proto = req.headers.get('x-forwarded-proto') || 'http';
   const baseUrl = `${proto}://${host}`;
 
-  const spec = {
+  const spec: OpenApiDocument = {
     openapi: '3.0.3',
     info: {
       title: 'Paymock Acquiring API',
       version: '1.0.0',
-      description: 'API mock-сервісу інтернет-еквайрингу Paymock. Повна сумісність контракту запитів/відповідей, підтримка мультипроєктності та вебхуків.',
+      description:
+        'Публічна частина API mock-сервісу інтернет-еквайрингу Paymock. Повна сумісність контракту запитів/відповідей, підтримка мультипроєктності та вебхуків. Токен проєкту передається в заголовку `X-Token`; внутрішні (account/admin) ендпоїнти в цю специфікацію не входять.',
     },
     servers: [
       {
@@ -18,18 +116,17 @@ export async function GET(req: NextRequest) {
         description: 'Поточний сервер Paymock',
       },
     ],
+    tags: [
+      { name: 'Merchant', description: 'Мерчантське API: інвойси та дані проєкту' },
+      { name: 'Checkout', description: 'Публічна сторінка оплати та її дії' },
+    ],
     paths: {
       '/api/merchant/details': {
         get: {
           summary: 'Дані поточного мерчанта',
-          parameters: [
-            {
-              name: 'X-Token',
-              in: 'header',
-              required: true,
-              schema: { type: 'string' },
-            },
-          ],
+          tags: ['Merchant'],
+          parameters: [TOKEN_HEADER_PARAM],
+          security: [TOKEN_SECURITY],
           responses: {
             '200': {
               description: 'Успішна відповідь',
@@ -53,14 +150,9 @@ export async function GET(req: NextRequest) {
       '/api/merchant/invoice/create': {
         post: {
           summary: 'Створення рахунку (інвойсу)',
-          parameters: [
-            {
-              name: 'X-Token',
-              in: 'header',
-              required: true,
-              schema: { type: 'string' },
-            },
-          ],
+          tags: ['Merchant'],
+          parameters: [TOKEN_HEADER_PARAM],
+          security: [TOKEN_SECURITY],
           requestBody: {
             required: true,
             content: {
@@ -74,7 +166,12 @@ export async function GET(req: NextRequest) {
                     merchantPaymInfo: { type: 'object' },
                     redirectUrl: { type: 'string' },
                     webHookUrl: { type: 'string' },
-                    validity: { type: 'integer', default: 900, description: 'Час дії рахунку в секундах (за замовчуванням 900 с / 15 хвилин)' },
+                    validity: {
+                      type: 'integer',
+                      default: 900,
+                      description:
+                        'Час дії рахунку в секундах (за замовчуванням 900 с / 15 хвилин)',
+                    },
                     paymentType: { type: 'string', enum: ['debit', 'hold'] },
                   },
                 },
@@ -104,13 +201,11 @@ export async function GET(req: NextRequest) {
       '/api/merchant/invoice/status': {
         get: {
           summary: 'Перевірка статусу рахунку',
+          description:
+            'Статус рахунку читається лише власником проєкту: запит без дійсного `X-Token` повертає 403.',
+          tags: ['Merchant'],
           parameters: [
-            {
-              name: 'X-Token',
-              in: 'header',
-              required: true,
-              schema: { type: 'string' },
-            },
+            TOKEN_HEADER_PARAM,
             {
               name: 'invoiceId',
               in: 'query',
@@ -118,6 +213,7 @@ export async function GET(req: NextRequest) {
               schema: { type: 'string' },
             },
           ],
+          security: [TOKEN_SECURITY],
           responses: {
             '200': {
               description: 'Стан рахунку',
@@ -135,6 +231,7 @@ export async function GET(req: NextRequest) {
                 },
               },
             },
+            '403': { description: 'Недійсний або відсутній токен' },
             '404': { description: 'Рахунок не знайдено' },
           },
         },
@@ -142,14 +239,9 @@ export async function GET(req: NextRequest) {
       '/api/merchant/invoice/cancel': {
         post: {
           summary: 'Скасування або повернення коштів за рахунком',
-          parameters: [
-            {
-              name: 'X-Token',
-              in: 'header',
-              required: true,
-              schema: { type: 'string' },
-            },
-          ],
+          tags: ['Merchant'],
+          parameters: [TOKEN_HEADER_PARAM],
+          security: [TOKEN_SECURITY],
           requestBody: {
             required: true,
             content: {
@@ -169,20 +261,16 @@ export async function GET(req: NextRequest) {
           responses: {
             '200': { description: 'Повернення успішне' },
             '400': { description: 'Неприпустимий стан рахунку або параметри' },
+            '403': { description: 'Недійсний або відсутній токен' },
           },
         },
       },
       '/api/merchant/invoice/remove': {
         post: {
           summary: 'Анулювання неоплаченого рахунку',
-          parameters: [
-            {
-              name: 'X-Token',
-              in: 'header',
-              required: true,
-              schema: { type: 'string' },
-            },
-          ],
+          tags: ['Merchant'],
+          parameters: [TOKEN_HEADER_PARAM],
+          security: [TOKEN_SECURITY],
           requestBody: {
             required: true,
             content: {
@@ -200,198 +288,111 @@ export async function GET(req: NextRequest) {
           responses: {
             '200': { description: 'Рахунок успішно анульовано' },
             '400': { description: 'Неможливо анулювати цей рахунок' },
+            '403': { description: 'Недійсний або відсутній токен' },
           },
         },
       },
 
-      '/api/mcp': {
-        post: {
-          summary: 'MCP-сервер (Model Context Protocol)',
+      /*
+       * The checkout surface is public by design: the URL is handed to the
+       * payer (it arrives in `pageUrl` of the invoice creation response) and
+       * must work without any merchant credential — the payer has none.
+       */
+      '/pay/{invoiceId}': {
+        get: {
+          summary: 'Сторінка оплати рахунку',
           description:
-            'JSON-RPC 2.0 ендпоїнт для підключення AI-асистентів. Підтримує initialize, server/discover, notifications/initialized, ping, tools/list, tools/call, resources/list, resources/read та prompts/list. Токен проєкту (`pmk_live_…`) обмежує сесію одним проєктом, глобальний токен акаунта (`pmk_usr_…`) — усіма проєктами акаунта.',
-          tags: ['MCP'],
+            'Публічна сторінка оплати. Токен не потрібен: платіжник переходить за посиланням, отриманим у відповідь на створення рахунку.',
+          tags: ['Checkout'],
           parameters: [
             {
-              name: 'X-Token',
-              in: 'header',
+              name: 'invoiceId',
+              in: 'path',
               required: true,
-              description: 'Токен проєкту (`pmk_live_…`) або глобальний токен акаунта (`pmk_usr_…`)',
               schema: { type: 'string' },
             },
+          ],
+          security: [],
+          responses: {
+            '200': {
+              description: 'Сторінка оплати',
+              content: {
+                'text/html': {
+                  schema: { type: 'string' },
+                },
+              },
+            },
+            '404': { description: 'Рахунок не знайдено' },
+          },
+        },
+      },
+      '/pay/{invoiceId}/action': {
+        post: {
+          summary: 'Дія платіжника на сторінці оплати',
+          description:
+            'Симуляція дії платіжника (успіх / відхилення / прострочення). Токен не потрібен.',
+          tags: ['Checkout'],
+          parameters: [
             {
-              name: 'mcp-protocol-version',
-              in: 'header',
-              required: false,
-              schema: { type: 'string', example: '2024-11-05' },
+              name: 'invoiceId',
+              in: 'path',
+              required: true,
+              schema: { type: 'string' },
             },
           ],
+          security: [],
           requestBody: {
             required: true,
             content: {
               'application/json': {
                 schema: {
                   type: 'object',
-                  required: ['jsonrpc', 'method'],
+                  required: ['action'],
                   properties: {
-                    jsonrpc: { type: 'string', enum: ['2.0'] },
-                    id: { type: ['string', 'number', 'null'] },
-                    method: {
-                      type: 'string',
-                      examples: ['initialize', 'tools/list', 'tools/call', 'resources/list', 'resources/read', 'ping'],
-                    },
-                    params: { type: 'object' },
+                    action: { type: 'string', enum: ['success', 'failure', 'expired'] },
                   },
                 },
               },
             },
           },
           responses: {
-            '200': { description: 'JSON-RPC відповідь (result або error)' },
-            '204': { description: 'Сповіщення прийнято без відповіді' },
-            '400': { description: 'Невірний JSON' },
-            '401': { description: 'Недійсний або відсутній токен' },
+            '200': {
+              description: 'Статус рахунку оновлено',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      ok: { type: 'boolean' },
+                      status: { type: 'string' },
+                      redirectUrl: { type: 'string', nullable: true },
+                    },
+                  },
+                },
+              },
+            },
+            '400': { description: 'Некоректна дія або рахунок у фінальному статусі' },
+            '404': { description: 'Рахунок не знайдено' },
             '429': { description: 'Перевищено ліміт запитів' },
           },
         },
       },
-      '/api/admin/projects': {
-        get: {
-          summary: 'Проєкти акаунта, рахунки, вебхуки та статистика',
-          tags: ['Account'],
-          parameters: [
-            { name: 'projectId', in: 'query', required: false, schema: { type: 'string' } },
-          ],
-          responses: {
-            '200': { description: 'Дані кабінету' },
-            '401': { description: 'Недійсний або відсутній токен' },
-          },
-        },
-        post: {
-          summary: 'Створення проєкту',
-          tags: ['Account'],
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['name'],
-                  properties: {
-                    name: { type: 'string', minLength: 1, maxLength: 120 },
-                    edrpou: { type: 'string', maxLength: 32 },
-                  },
-                },
-              },
-            },
-          },
-          responses: {
-            '200': { description: 'Створений проєкт разом із його X-Token' },
-            '400': { description: 'Некоректна назва проєкту' },
-          },
-        },
-        patch: {
-          summary: 'Оновлення проєкту',
-          tags: ['Account'],
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['id'],
-                  properties: {
-                    id: { type: 'string' },
-                    name: { type: 'string', maxLength: 120 },
-                    logo_url: { type: 'string', nullable: true },
-                    default_webhook_url: { type: 'string', nullable: true },
-                    default_success_url: { type: 'string', nullable: true },
-                    default_fail_url: { type: 'string', nullable: true },
-                  },
-                },
-              },
-            },
-          },
-          responses: {
-            '200': { description: 'Оновлений проєкт' },
-            '400': { description: 'Некоректні параметри' },
-            '404': { description: 'Проєкт не знайдено або немає доступу' },
-          },
-        },
-        delete: {
-          summary: 'Видалення проєкту разом із його рахунками',
-          tags: ['Account'],
-          parameters: [{ name: 'id', in: 'query', required: true, schema: { type: 'string' } }],
-          responses: {
-            '200': { description: 'Проєкт видалено' },
-            '404': { description: 'Проєкт не знайдено або немає доступу' },
-          },
-        },
-      },
-      '/api/admin/projects/reset-token': {
-        post: {
-          summary: 'Ротація X-Token проєкту',
-          description: 'Старий токен перестає працювати одразу після ротації.',
-          tags: ['Account'],
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['projectId'],
-                  properties: { projectId: { type: 'string' } },
-                },
-              },
-            },
-          },
-          responses: {
-            '200': { description: 'Проєкт із новим токеном' },
-            '404': { description: 'Проєкт не знайдено або немає доступу' },
-          },
-        },
-      },
-      '/api/account/tokens': {
-        get: {
-          summary: 'Активні персональні токени доступу',
-          description: 'Повертає лише метадані — значення токена не відновлюється зі сховища.',
-          tags: ['Account'],
-          responses: {
-            '200': { description: 'Список активних токенів' },
-            '401': { description: 'Недійсний або відсутній токен' },
-          },
-        },
-        post: {
-          summary: 'Випуск персонального токена доступу',
-          description: 'Значення токена показується один раз — зберігається лише SHA-256 хеш.',
-          tags: ['Account'],
-          requestBody: {
-            required: false,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  properties: { name: { type: 'string', maxLength: 64 } },
-                },
-              },
-            },
-          },
-          responses: {
-            '201': { description: 'Новий токен (показується один раз)' },
-            '401': { description: 'Недійсний або відсутній токен' },
-          },
-        },
-        delete: {
-          summary: 'Відкликання персональних токенів',
-          tags: ['Account'],
-          parameters: [{ name: 'name', in: 'query', required: false, schema: { type: 'string' } }],
-          responses: {
-            '200': { description: 'Кількість відкликаних токенів' },
-            '401': { description: 'Недійсний або відсутній токен' },
-          },
+    },
+    components: {
+      securitySchemes: {
+        XToken: {
+          type: 'apiKey',
+          in: 'header',
+          name: 'X-Token',
+          description:
+            'Токен мерчантського проєкту, який видається в кабінеті. Передається в заголовку `X-Token`. Значення токена — секрет інтегратора, у документації використовується лише плейсхолдер.',
         },
       },
     },
+    // The default for the whole document: every operation that does not
+    // override it needs the merchant token.
+    security: [TOKEN_SECURITY],
   };
 
-  return NextResponse.json(spec);
+  return NextResponse.json(spec, { headers: NO_STORE });
 }

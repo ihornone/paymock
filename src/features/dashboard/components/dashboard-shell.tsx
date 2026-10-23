@@ -8,6 +8,7 @@ import { Button } from '@/shared/components/ui/button';
 import { Skeleton } from '@/shared/components/ui/skeleton';
 import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/shared/components/ui/dialog';
 import { Input } from '@/shared/components/ui/input';
+import { SecretField } from '@/shared/components/ui/secret-field';
 import { SidebarProvider, SidebarInset } from '@/shared/components/ui/sidebar';
 import { AppSidebar } from './app-sidebar';
 import { SiteHeader } from './site-header';
@@ -28,10 +29,20 @@ export function DashboardShell({ children, pageTitle }: DashboardShellProps) {
     isUserAuthenticated,
     isLoaded,
     loading,
+    issuedCredentials,
+    clearIssuedCredentials,
   } = useDashboard();
 
   const [newProjectName, setNewProjectName] = React.useState('');
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [isCredentialsOpen, setIsCredentialsOpen] = React.useState(false);
+
+  // The token and the webhook secret exist in plaintext exactly once — when
+  // the project is created or the token is rotated. They are shown here and
+  // dropped afterwards.
+  React.useEffect(() => {
+    if (issuedCredentials) setIsCredentialsOpen(true);
+  }, [issuedCredentials]);
 
   const onSubmitCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -145,6 +156,52 @@ export function DashboardShell({ children, pageTitle }: DashboardShellProps) {
             </Button>
           </DialogFooter>
         </form>
+      </Dialog>
+
+      {/* ==================== ISSUED CREDENTIALS (shown once) ==================== */}
+      <Dialog
+        open={isCredentialsOpen && !!issuedCredentials}
+        onOpenChange={(open) => {
+          setIsCredentialsOpen(open);
+          if (!open) clearIssuedCredentials();
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>Збережіть доступ до проєкту</DialogTitle>
+          <DialogDescription className="text-xs text-muted-foreground">
+            Ці значення показуються один раз — сервер зберігає лише їхні хеші. Скопіюйте їх зараз.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3 py-4">
+          <SecretField
+            label="X-Token (токен мерчанта)"
+            value={issuedCredentials?.token || ''}
+            visibleChars={10}
+            copyLabel="Копіювати токен"
+          />
+          {issuedCredentials?.webhookSecret ? (
+            <SecretField
+              label="Webhook secret (підпис X-Paymock-Signature)"
+              value={issuedCredentials.webhookSecret}
+              visibleChars={12}
+              copyLabel="Копіювати secret"
+            />
+          ) : null}
+        </div>
+
+        <DialogFooter>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => {
+              setIsCredentialsOpen(false);
+              clearIssuedCredentials();
+            }}
+          >
+            Я зберіг
+          </Button>
+        </DialogFooter>
       </Dialog>
     </SidebarProvider>
   );

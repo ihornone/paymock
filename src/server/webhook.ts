@@ -1,9 +1,75 @@
 import { WebhooksRepository } from '@/server/db/webhooks.repository';
+import { ProjectsRepository } from '@/server/db/projects.repository';
 import { generateWebhookLogId } from '@/shared/utils/id';
 import { logger } from '@/shared/logger';
 import { toInvoiceStatusResponse } from '@/shared/services/invoice-mapper';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
+import { hmacSha256Hex } from '@/server/auth/project-token';
 import type { InvoiceRecord, WebhookLogRecord } from '@/shared/types/models';
+
+/**
+ * The maximum size of the body Paymock sends.
+ *
+ * A merchant webhook payload is small by construction; a payload above this
+ * limit is a sign of a malformed invoice rather than a legitimate delivery.
+ */
+export const MAX_WEBHOOK_BODY_BYTES = 64 * 1024;
+
+/**
+ * The maximum size of the response body that is read from the receiver.
+ *
+ * Without a cap a hostile (or broken) endpoint could stream an arbitrary
+ * amount of data into the isolate's memory.
+ */
+export const MAX_WEBHOOK_RESPONSE_BYTES = 8 * 1024;
+
+/** The maximum number of redirects that are followed. */
+export const MAX_WEBHOOK_REDIRECTS = 1;
+
+/**
+ * Reads at most `maxBytes` from a response body.
+ */
+async function readBodyCapped(res: Response, maxBytes: number): Promise<string> {
+  if (!res.body) return '';
+
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  let truncated = false;
+
+  try {
+    while (total < maxBytes) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+
+      const remaining = maxBytes - total;
+      if (value.length > remaining) {
+        chunks.push(value.slice(0, remaining));
+        total += remaining;
+        truncated = true;
+        break;
+      }
+
+      chunks.push(value);
+      total += value.length;
+    }
+  } finally {
+    // Cancel the stream so the connection is released instead of being
+    // drained in the background.
+    await reader.cancel().catch(() => undefined);
+  }
+
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  const text = new TextDecoder().decode(merged);
+  return truncated ? `${text}…[truncated]` : text;
+}
 
 /**
  * Validates whether a target URL is safe for webhook dispatching (SSRF protection).
@@ -63,6 +129,7 @@ export function isSafeWebhookUrl(inputUrl: string): boolean {
  */
 export async function sendWebhook(invoice: InvoiceRecord): Promise<WebhookLogRecord> {
   const webhooksRepo = new WebhooksRepository();
+  const projectsRepo = new ProjectsRepository();
   const logId = generateWebhookLogId();
   const startTime = Date.now();
 
@@ -95,22 +162,99 @@ export async function sendWebhook(invoice: InvoiceRecord): Promise<WebhookLogRec
       });
     }
 
+    if (new TextEncoder().encode(requestBody).length > MAX_WEBHOOK_BODY_BYTES) {
+      logger.warn({
+        event: 'webhook_blocked_too_large',
+        invoiceId: invoice.id,
+        projectId: invoice.project_id,
+      });
+
+      return webhooksRepo.createLog({
+        id: logId,
+        projectId: invoice.project_id,
+        invoiceId: invoice.id,
+        url: invoice.webhook_url,
+        statusCode: 413,
+        requestBody: '[payload too large]',
+        responseBody: 'Payload exceeded the maximum webhook body size',
+        durationMs: 0,
+        error: 'PAYLOAD_TOO_LARGE',
+      });
+    }
+
+    // The signing secret of the project. A webhook without a signature cannot
+    // be distinguished from a forgery by the receiver, so every delivery is
+    // signed with HMAC-SHA256 over the exact body that is sent.
+    const webhookSecret = await projectsRepo.findWebhookSecret(invoice.project_id);
+    const signature = webhookSecret
+      ? await hmacSha256Hex(webhookSecret, requestBody)
+      : null;
+
     try {
-      const res = await fetch(invoice.webhook_url, {
+      let currentUrl = invoice.webhook_url;
+      let res = await fetch(currentUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'User-Agent': 'Paymock-Webhook-Dispatcher/1.0',
+          'X-Paymock-Event': 'invoice.status_changed',
+          ...(signature ? { 'X-Paymock-Signature': `sha256=${signature}` } : {}),
         },
         body: requestBody,
+        redirect: 'manual',
         signal: AbortSignal.timeout(7000),
       });
 
-      statusCode = res.status;
-      const text = await res.text();
-      responseBody = text.slice(0, 2048);
+      // At most one redirect is followed, and the new target is validated
+      // against the SSRF filter again — a redirect is an attacker-controlled
+      // destination just like the original URL.
+      let redirects = 0;
+      while (
+        res.status >= 300 &&
+        res.status < 400 &&
+        redirects < MAX_WEBHOOK_REDIRECTS &&
+        res.headers.get('location')
+      ) {
+        const location = res.headers.get('location')!;
+        let nextUrl: string;
+        try {
+          nextUrl = new URL(location, currentUrl).toString();
+        } catch {
+          errorMsg = 'redirect target is not a valid URL';
+          break;
+        }
 
-      if (!res.ok) {
+        if (!isSafeWebhookUrl(nextUrl)) {
+          logger.warn({
+            event: 'webhook_blocked_ssrf',
+            url: nextUrl,
+            invoiceId: invoice.id,
+          });
+          errorMsg = 'redirect target blocked by SSRF protection filter';
+          break;
+        }
+
+        currentUrl = nextUrl;
+        redirects += 1;
+
+        res = await fetch(currentUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': 'Paymock-Webhook-Dispatcher/1.0',
+            'X-Paymock-Event': 'invoice.status_changed',
+            ...(signature ? { 'X-Paymock-Signature': `sha256=${signature}` } : {}),
+          },
+          body: requestBody,
+          redirect: 'manual',
+          signal: AbortSignal.timeout(7000),
+        });
+      }
+
+      statusCode = res.status;
+      responseBody = await readBodyCapped(res, MAX_WEBHOOK_RESPONSE_BYTES);
+
+      if (!res.ok && !errorMsg) {
         errorMsg = `remote server returned HTTP ${res.status}`;
       }
     } catch (err: any) {

@@ -22,6 +22,7 @@ function SettingsContent() {
     handleUpdateProjectName,
     handleResetToken,
     handleDeleteProject,
+    issuedCredentials,
     user,
   } = useDashboard();
 
@@ -243,13 +244,37 @@ function SettingsContent() {
             </div>
           </div>
 
-          {/* Current Token */}
-          <SecretField
-            label="Поточний токен мерчанта"
-            value={selectedProject.token}
-            visibleChars={10}
-            copyLabel="Копіювати токен"
-          />
+          {/*
+            The token is stored as a SHA-256 hash, so it cannot be displayed a
+            second time. It is shown exactly once — right after the project
+            was created or the token was rotated.
+          */}
+          {issuedCredentials && issuedCredentials.projectId === selectedProject.id && issuedCredentials.token ? (
+            <div className="space-y-2">
+              <SecretField
+                label="Токен мерчанта (показано один раз)"
+                value={issuedCredentials.token}
+                visibleChars={10}
+                copyLabel="Копіювати токен"
+              />
+              {issuedCredentials.webhookSecret ? (
+                <SecretField
+                  label="Webhook secret (показано один раз)"
+                  value={issuedCredentials.webhookSecret}
+                  visibleChars={12}
+                  copyLabel="Копіювати secret"
+                />
+              ) : null}
+              <p className="text-[11px] text-amber-400/90">
+                Збережіть значення зараз — сервер зберігає лише хеш, повторно переглянути токен неможливо.
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-input bg-secondary/50 p-3.5 text-xs text-muted-foreground">
+              Токен зберігається у вигляді SHA-256 хешу — показати його повторно неможливо. Щоб отримати
+              новий, скористайтеся кнопкою «Скинути токен»: попередній перестане працювати одразу.
+            </div>
+          )}
 
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
             <div className="text-xs text-muted-foreground flex-1">

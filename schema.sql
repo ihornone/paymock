@@ -1,11 +1,17 @@
 -- Paymock Cloudflare D1 Database Schema
+--
+-- Секрети ніколи не зберігаються у відкритому вигляді:
+--   * `projects.token_hash`  — SHA-256 від X-Token мерчанта;
+--   * `projects.webhook_secret` — ключ HMAC для підпису вебхуків.
+-- Токен показується користувачу рівно один раз — при створенні або ротації.
 
 -- 1. Таблиця проєктів (Мерчантів)
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY,
-  user_id TEXT,
+  user_id TEXT NOT NULL,
   name TEXT NOT NULL,
-  token TEXT UNIQUE NOT NULL,
+  token_hash TEXT UNIQUE NOT NULL,
+  webhook_secret TEXT NOT NULL,
   edrpou TEXT NOT NULL DEFAULT '12345678',
   logo_url TEXT,
   default_webhook_url TEXT,
@@ -55,13 +61,46 @@ CREATE TABLE IF NOT EXISTS webhook_logs (
   created_at TEXT NOT NULL
 );
 
+-- 4. Персональні токени доступу (Personal Access Tokens).
+-- MCP-сервер та акаунтні API автентифікуються цим токеном.
+-- Зберігається лише SHA-256 хеш — значення токена не відновити зі сховища.
+CREATE TABLE IF NOT EXISTS personal_access_tokens (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  token_hash TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL DEFAULT 'default',
+  created_at TEXT NOT NULL,
+  last_used_at TEXT,
+  revoked_at TEXT
+);
+
+-- 5. Журнал аудиту мутацій: хто, звідки, що зробив і з яким результатом.
+CREATE TABLE IF NOT EXISTS audit_log (
+  id TEXT PRIMARY KEY,
+  created_at TEXT NOT NULL,
+  actor_user_id TEXT,
+  actor_kind TEXT NOT NULL,
+  action TEXT NOT NULL,
+  target_type TEXT,
+  target_id TEXT,
+  ip TEXT,
+  user_agent TEXT,
+  result TEXT NOT NULL,
+  detail TEXT
+);
+
 -- Індекси
-CREATE INDEX IF NOT EXISTS idx_projects_token ON projects(token);
+CREATE INDEX IF NOT EXISTS idx_projects_token_hash ON projects(token_hash);
 CREATE INDEX IF NOT EXISTS idx_projects_user_id ON projects(user_id);
 CREATE INDEX IF NOT EXISTS idx_invoices_project ON invoices(project_id);
 CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
 CREATE INDEX IF NOT EXISTS idx_webhook_logs_invoice ON webhook_logs(invoice_id);
 CREATE INDEX IF NOT EXISTS idx_webhook_logs_project ON webhook_logs(project_id);
+CREATE INDEX IF NOT EXISTS idx_pat_user_id ON personal_access_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_pat_token_hash ON personal_access_tokens(token_hash);
+CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_log_actor ON audit_log(actor_user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action);
 
 -- Складені індекси для гарячих запитів дашборду:
 --   WHERE project_id = ? ORDER BY created_date DESC LIMIT n
@@ -70,35 +109,6 @@ CREATE INDEX IF NOT EXISTS idx_webhook_logs_project ON webhook_logs(project_id);
 CREATE INDEX IF NOT EXISTS idx_invoices_project_created ON invoices(project_id, created_date);
 CREATE INDEX IF NOT EXISTS idx_webhook_logs_project_created ON webhook_logs(project_id, created_at);
 
--- Початковий демо-проєкт для миттєвого тестування.
--- `user_id` = 'demo_user' — власник, з яким проєкт буде видно в кабінеті
--- при запиті з заголовком `x-user-id: demo_user`.
-INSERT OR IGNORE INTO projects (id, user_id, name, token, edrpou, default_webhook_url, created_at, updated_at)
-VALUES (
-  'pm_demo_store',
-  'demo_user',
-  'Демо Магазин (Paymock)',
-  'pmk_demo_test1234567890abcdef',
-  '38749210',
-  'https://webhook.site/paymock-demo',
-  datetime('now'),
-  datetime('now')
-);
-
-UPDATE projects SET user_id = 'demo_user' WHERE id = 'pm_demo_store' AND user_id IS NULL;
-
--- 4. Персональні токени доступу (Personal Access Tokens).
--- MCP-сервер та акаунтні API автентифікуються цим токеном.
--- Зберігається лише SHA-256 хеш — значення токена не відновити зі сховища.
-CREATE TABLE IF NOT EXISTS personal_access_tokens (
-  id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL,
-  token_hash TEXT NOT NULL UNIQUE,
-  name TEXT NOT NULL DEFAULT 'default',
-  created_at TEXT NOT NULL,
-  last_used_at TEXT,
-  revoked_at TEXT
-);
-
-CREATE INDEX IF NOT EXISTS idx_pat_user_id ON personal_access_tokens(user_id);
-CREATE INDEX IF NOT EXISTS idx_pat_token_hash ON personal_access_tokens(token_hash);
+-- Демо-проєкт НЕ сидиться тут: його токен генерується при бутстрапі
+-- (scripts/seed-demo.ts) і зберігається лише у вигляді хешу.
+-- Статичний токен у репозиторії однаково використовував би всі інстанси.

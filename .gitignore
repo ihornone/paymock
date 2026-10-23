@@ -18,6 +18,11 @@
 # Cloudflare Wrangler
 /.wrangler/
 
+# D1 backups (scripts/cloudflare/backup-d1.ts)
+# A backup contains merchant data and may contain credentials — it must
+# never end up in version control.
+/backups/
+
 # Environment files
 .env
 .env*.local

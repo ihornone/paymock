@@ -1,4 +1,5 @@
 import { ProjectsRepository } from '@/server/db/projects.repository';
+import { hashProjectToken } from './project-token';
 import type { Project } from '@/shared/types/models';
 
 /**
@@ -9,8 +10,9 @@ import type { Project } from '@/shared/types/models';
  * (`server/discover`, `initialize`, `notifications/initialized`, `ping`).
  * A short TTL removes that query from the hot path.
  *
- * The cache is per-isolate and therefore best-effort: a cold isolate simply
- * repopulates it. Entries are invalidated explicitly when a token is rotated.
+ * The cache is keyed by the **hash** of the token: the plaintext credential
+ * is not kept in memory as a map key, and a rotation cannot leave the old
+ * token alive in the cache — the entry is dropped by project id instead.
  */
 export const TOKEN_CACHE_TTL_MS = 60_000;
 export const MAX_TOKEN_CACHE_ENTRIES = 1_000;
@@ -46,30 +48,37 @@ export async function findProjectByToken(
   token: string,
   projectsRepo: ProjectsRepository = new ProjectsRepository()
 ): Promise<Project | null> {
+  const tokenHash = await hashProjectToken(token);
   const now = Date.now();
-  const cached = tokenCache.get(token);
+  const cached = tokenCache.get(tokenHash);
 
   if (cached) {
     if (now <= cached.expiresAt) {
       return cached.project;
     }
-    tokenCache.delete(token);
+    tokenCache.delete(tokenHash);
   }
 
-  const project = await projectsRepo.findByToken(token);
+  const project = await projectsRepo.findByTokenHash(tokenHash);
 
   evictIfNeeded();
-  tokenCache.set(token, { project, expiresAt: now + TOKEN_CACHE_TTL_MS });
+  tokenCache.set(tokenHash, { project, expiresAt: now + TOKEN_CACHE_TTL_MS });
 
   return project;
 }
 
 /**
- * Drops a token from the cache. Must be called whenever a token is rotated,
- * otherwise the old token stays valid for up to the TTL.
+ * Drops every cached entry of a project.
+ *
+ * Called after a token rotation: the old token's hash is no longer valid,
+ * but its cache entry would keep answering until the TTL expires.
  */
-export function invalidateTokenCache(token: string): void {
-  tokenCache.delete(token);
+export function invalidateTokenCacheForProject(projectId: string): void {
+  for (const [key, entry] of tokenCache.entries()) {
+    if (entry.project?.id === projectId) {
+      tokenCache.delete(key);
+    }
+  }
 }
 
 /**
@@ -83,7 +92,7 @@ export function updateCachedProject(
   projectId: string,
   patch: Partial<Project>
 ): void {
-  for (const [token, entry] of tokenCache.entries()) {
+  for (const entry of tokenCache.values()) {
     if (entry.project?.id === projectId) {
       entry.project = { ...entry.project, ...patch };
     }

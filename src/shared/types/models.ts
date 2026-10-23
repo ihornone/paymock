@@ -1,10 +1,15 @@
 import type { InvoiceStatus, PaymentType } from './acquiring';
 
+/**
+ * A project as it may leave the server.
+ *
+ * The merchant token is **not** part of this shape: it is shown once, when it
+ * is created or rotated, and never again.
+ */
 export interface Project {
   id: string;
-  user_id?: string | null;
+  user_id: string;
   name: string;
-  token: string;
   edrpou: string;
   logo_url?: string | null;
   default_webhook_url: string | null;
@@ -12,6 +17,18 @@ export interface Project {
   default_fail_url: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * A project together with the credentials that exist only in plaintext.
+ *
+ * Returned by the calls that create or rotate a token; never persisted and
+ * never re-sent.
+ */
+export interface ProjectCredentials {
+  project: Project;
+  token: string;
+  webhookSecret: string;
 }
 
 export interface InvoiceRecord {
@@ -62,7 +79,8 @@ export interface InvoiceStats {
 
 export interface CreateProjectDTO {
   name: string;
-  userId?: string | null;
+  /** The owner. Mandatory — a project without an owner is unreachable. */
+  userId: string;
   edrpou?: string;
   logoUrl?: string | null;
   defaultWebhookUrl?: string;

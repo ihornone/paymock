@@ -3,16 +3,27 @@ import { marked } from 'marked';
 import { DOCS_ARTICLES } from '@/features/docs/articles';
 import { DocsShell } from '@/features/docs/components/docs-shell';
 import { DocContentViewer } from '@/features/docs/components/doc-content-viewer';
+import { requireDocsSession } from '@/features/docs/server/docs-session';
 
 interface DocsPageProps {
   params: Promise<{ slug: string }>;
 }
 
-export async function generateStaticParams() {
-  return Object.keys(DOCS_ARTICLES).map((slug) => ({ slug }));
-}
+/**
+ * The documentation is an account-scoped surface.
+ *
+ * The page is rendered per request (`force-dynamic`) and only after the
+ * session check: a static build would put the whole contract of the
+ * platform — including the account-scoped endpoints — into publicly
+ * reachable files. `generateStaticParams` is deliberately absent for the
+ * same reason.
+ */
+export const dynamic = 'force-dynamic';
 
 export default async function DocArticlePage({ params }: DocsPageProps) {
+  // The article content is only rendered for an authenticated account.
+  await requireDocsSession();
+
   const { slug } = await params;
   const article = DOCS_ARTICLES[slug];
 

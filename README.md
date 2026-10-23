@@ -45,13 +45,23 @@ pnpm install
 pnpm db:init:local
 ```
 
+> Dev-сервер звертається до Cloudflare D1 через REST API, тому локальна база —
+> окрема (`paymock-dev-db`), а **не** продакшен-база (`paymock-db`: вона
+> прив'язана до Worker у `wrangler.toml`, і dev-сервер не повинен у неї
+> писати). Ідентифікатор задається через `CLOUDFLARE_DATABASE_ID` — див.
+> `.env.example`.
+
 ### 3. Запуск сервера розробки
 ```bash
 pnpm dev
 ```
-Сервер буде доступний за адресою: **[http://localhost:8787](http://localhost:8787)**.
-* Відкрийте браузер на `http://localhost:8787`, щоб побачити **Веб-кабінет розробника**, наявні проєкти та створити тестовий рахунок.
-* Початковий демо-токен: `pmk_demo_test1234567890abcdef`.
+Сервер буде доступний за адресою: **[http://localhost:8788](http://localhost:8788)**.
+* Відкрийте браузер на `http://localhost:8788`, щоб побачити **Веб-кабінет розробника**, наявні проєкти та створити тестовий рахунок.
+* Демо-проєкт створюється окремою командою, і його токен **генерується при кожному запуску** та друкується один раз (у базі зберігається лише SHA-256 хеш):
+  ```bash
+  pnpm db:seed:demo
+  ```
+  У продакшені демо-тенант вимикається змінною `ENABLE_DEMO_TENANT=false`.
 
 ---
 
@@ -87,7 +97,7 @@ pnpm deploy
 
 Для перемикання вашого сайту чи інтернет-магазину на Paymock потрібно лише:
 1. Замінити базовий URL на адресу вашого Paymock:
-   - Локально: `http://localhost:8787`
+   - Локально: `http://localhost:8788`
    - На Cloudflare: `https://paymock.<your-subdomain>.workers.dev`
 2. Вказати `X-Token` потрібного проєкту з кабінету Paymock.
 
@@ -99,7 +109,7 @@ pnpm deploy
 ```bash
 curl -X POST https://your-paymock.workers.dev/api/merchant/invoice/create \
   -H "Content-Type: application/json" \
-  -H "X-Token: pmk_demo_test1234567890abcdef" \
+  -H "X-Token: <ваш токен мерчанта>" \
   -d '{
     "amount": 4200,
     "ccy": 980,
@@ -132,7 +142,7 @@ curl -X POST https://your-paymock.workers.dev/api/merchant/invoice/create \
 
 #### 2. Node.js / TypeScript
 ```typescript
-const response = await fetch('http://localhost:8787/api/merchant/invoice/create', {
+const response = await fetch('http://localhost:8788/api/merchant/invoice/create', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -191,7 +201,7 @@ Paymock має вбудований віддалений хмарний серв
 {
   "mcpServers": {
     "paymock": {
-      "url": "http://localhost:8787/api/mcp",
+      "url": "http://localhost:8788/api/mcp",
       "headers": {
         "X-Token": "pmk_usr_ваш_глобальний_токен_з_профілю"
       }
@@ -204,12 +214,40 @@ Paymock має вбудований віддалений хмарний серв
 ### Доступні інструменти MCP:
 - `list_projects` — перелік усіх магазинів та ботів акаунта.
 - `create_project` — автоматична реєстрація нового проєкту асистентом з генерацією `.env`.
-- `get_project` — отримання реквізитів, вебхуків та токена проєкту.
+- `get_project` — отримання реквізитів та вебхуків проєкту.
 - `reset_project_token` — перевипуск секретного ключа проєкту.
 - `create_invoice` — виставлення нового інвойсу з потрібною сумою та призначенням.
 - `get_invoice` / `list_invoices` — перевірка статусу та списку платежів.
 - `simulate_payment` — миттєва симуляція оплати карткою (`success` / `failure` / `expired`) із тригером вебхука.
 - `get_webhook_logs` / `retry_webhook` — інспектування та повторна відправка колбеків на ваш бекенд.
+
+> Токен проєкту **не повертається** у списках і ресурсах MCP — тільки в момент
+> створення або ротації, один раз. У базі зберігається лише SHA-256 хеш.
+
+---
+
+## 🔐 Модель безпеки
+
+| Аспект | Поведінка |
+|---|---|
+| Токен мерчанта (`X-Token`) | Зберігається лише SHA-256 хеш. Показується **один раз** — при створенні проєкту або ротації. |
+| Webhook secret | HMAC-ключ проєкту. Підпис `X-Paymock-Signature: sha256=…` у кожному вихідному вебхуці. |
+| Акаунтний API (`/api/admin/*`, `/api/account/*`) | Потрібна сессия Clerk або `X-Token: pmk_usr_…`. Без сесії — `401` на **кожному** методі. |
+| Cookie-мутації | Перевірка `Sec-Fetch-Site` / `Origin` (CSRF). |
+| Анонімні запити | Rate limit за IP + запис у `audit_log` (актор, IP, ціль, результат). |
+| MCP-ресурси | Той самий guard, що й в інструментах: чужі проєкти не видно, секрети не віддаються. |
+
+Корисні команди:
+
+```bash
+pnpm run verify:security   # перевірка інстанту: очікує 401/403/429 замість 200
+pnpm run lint:sql          # CI-лінтер: заборона конкатенації в SQL
+pnpm run d1:backup         # вивантаження всіх таблиць D1 у backups/
+pnpm run db:migrate:security  # міграція: хеші токенів, ротація, user_id NOT NULL
+pnpm run db:seed:demo      # демо-тенант із згенерованим токеном (один раз)
+```
+
+Детальний опис усіх змін — у [REMEDIATION.md](./REMEDIATION.md).
 
 ---
 

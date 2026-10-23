@@ -16,13 +16,14 @@ let cachedToken: string | null = null;
  * cold start. The lookup only ever runs in local development, where the
  * production D1 binding is not available.
  */
-async function getCloudflareToken(): Promise<string> {
-  if (cachedToken) return cachedToken;
-
+async function getCloudflareToken(forceRefresh = false): Promise<string> {
+  // An explicit API token from the environment does not expire on its own.
   if (process.env.CLOUDFLARE_API_TOKEN) {
     cachedToken = process.env.CLOUDFLARE_API_TOKEN;
     return cachedToken;
   }
+
+  if (cachedToken && !forceRefresh) return cachedToken;
 
   try {
     const [{ default: fs }, { default: path }, { default: os }] = await Promise.all([
@@ -51,7 +52,15 @@ async function queryRemoteD1(
   params: any[] = []
 ): Promise<{ results: any[]; changes: number }> {
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID || 'e468b6b0d602ac91b1c044b15a4c4fbe';
-  const databaseId = process.env.CLOUDFLARE_DATABASE_ID || '29ae1343-80a1-46ff-a3c6-b521dcfb9e5a';
+  // The default is the **development** database (`paymock-dev-db`).
+  //
+  // The local dev server talks to Cloudflare over the REST API, so it needs a
+  // database id — and it must never be the production one: a dev server that
+  // writes to `paymock-db` creates test projects and invoices in real data.
+  // The production database is bound to the Worker in `wrangler.toml` and is
+  // only reached through that binding.
+  const databaseId =
+    process.env.CLOUDFLARE_DATABASE_ID || '2abd6467-dcfc-4fca-974b-7af75c3d4537';
   const token = await getCloudflareToken();
 
   // A missing token used to trigger `execSync('npx wrangler whoami')` here.
@@ -77,7 +86,18 @@ async function queryRemoteD1(
     });
   };
 
-  const response = await runQuery(token);
+  let response = await runQuery(token);
+
+  if (response.status === 401 || response.status === 403) {
+    // The OAuth token that `wrangler login` writes expires. The cached copy
+    // was then used until the dev server was restarted — every query failed
+    // with "not authorized" while the *file* already held a fresh token.
+    // Re-read the file and try once more.
+    const refreshed = await getCloudflareToken(true);
+    if (refreshed && refreshed !== token) {
+      response = await runQuery(refreshed);
+    }
+  }
 
   if (!response.ok) {
     const errText = await response.text();

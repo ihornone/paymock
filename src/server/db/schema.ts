@@ -4,14 +4,23 @@ import type { InvoiceStatus, PaymentType } from '@/shared/types/acquiring';
 
 /**
  * 1. Projects Table (Merchants / Multi-tenant stores)
+ *
+ * Two columns carry secrets and are never selected into an API response:
+ *  - `token_hash` — the SHA-256 of the merchant token. The plaintext token
+ *    exists only in the response of the call that creates or rotates it;
+ *  - `webhook_secret` — the HMAC key used to sign outgoing webhooks.
+ *
+ * `user_id` is NOT NULL: every project belongs to exactly one account, so an
+ * owner-less row can never be listed, used or audited.
  */
 export const projects = sqliteTable(
   'projects',
   {
     id: text('id').primaryKey(),
-    user_id: text('user_id'),
+    user_id: text('user_id').notNull(),
     name: text('name').notNull(),
-    token: text('token').notNull().unique(),
+    token_hash: text('token_hash').notNull().unique(),
+    webhook_secret: text('webhook_secret').notNull(),
     edrpou: text('edrpou').notNull().default('12345678'),
     logo_url: text('logo_url'),
     default_webhook_url: text('default_webhook_url'),
@@ -21,7 +30,7 @@ export const projects = sqliteTable(
     updated_at: text('updated_at').notNull(),
   },
   (table) => [
-    index('idx_projects_token').on(table.token),
+    index('idx_projects_token_hash').on(table.token_hash),
     index('idx_projects_user_id').on(table.user_id),
   ]
 );
@@ -121,6 +130,37 @@ export const personalAccessTokens = sqliteTable(
     index('idx_pat_token_hash').on(table.token_hash),
   ]
 );
+
+/**
+ * 5. Audit Log
+ *
+ * Every state-changing operation leaves a row here: who did it, from where,
+ * against which target and with which result. Anonymous attempts are logged
+ * too — they are the interesting ones.
+ */
+export const auditLog = sqliteTable(
+  'audit_log',
+  {
+    id: text('id').primaryKey(),
+    created_at: text('created_at').notNull(),
+    actor_user_id: text('actor_user_id'),
+    actor_kind: text('actor_kind').notNull(),
+    action: text('action').notNull(),
+    target_type: text('target_type'),
+    target_id: text('target_id'),
+    ip: text('ip'),
+    user_agent: text('user_agent'),
+    result: text('result').notNull(),
+    detail: text('detail'),
+  },
+  (table) => [
+    index('idx_audit_log_created').on(table.created_at),
+    index('idx_audit_log_actor').on(table.actor_user_id),
+    index('idx_audit_log_action').on(table.action),
+  ]
+);
+
+export type AuditLogRecord = typeof auditLog.$inferSelect;
 
 /**
  * Relational definitions for Drizzle Query API

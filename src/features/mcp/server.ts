@@ -8,6 +8,12 @@ import {
 import { ProjectsRepository } from '@/server/db/projects.repository';
 import { InvoicesRepository } from '@/server/db/invoices.repository';
 import { WebhooksRepository } from '@/server/db/webhooks.repository';
+import {
+  assertProjectAccess,
+  listAccessibleProjects,
+  ScopeError,
+  SCOPE_ERROR_MESSAGE,
+} from '@/server/auth/scope';
 import { MCP_TOOLS, executeMcpTool } from './tools';
 import type { McpScope } from './handlers/projects.handler';
 
@@ -41,18 +47,29 @@ export function createPaymockMcpServer(config: McpServerConfig = {}) {
 
   // The stdio server is configured with explicit environment variables, so it
   // always resolves to exactly one scope: a single project, or a whole user.
+  //
+  // A session without a scope sees nothing: the previous code fell back to
+  // "list every project in the table" when no user id was configured.
   const scope: McpScope = defaultProjectId
     ? { userId: null, projectId: defaultProjectId }
     : { userId, projectId: null };
 
+  const requireScope = (): void => {
+    if (!scope.userId && !scope.projectId) {
+      throw new ScopeError('MCP session has no scope: set PAYMOCK_USER_ID or PAYMOCK_PROJECT_ID');
+    }
+  };
+
   // 1. LIST RESOURCES
   server.setRequestHandler(ListResourcesRequestSchema, async () => {
-    const projects = await projectsRepo.list(userId);
+    requireScope();
+
+    const projects = await listAccessibleProjects(scope, projectsRepo);
     const resources = [
       {
         uri: 'paymock://projects',
         name: 'Список мерчант-проєктів',
-        description: 'Усі доступні проєкти та їхні параметри інтеграції (X-Token, URLs)',
+        description: 'Доступні проєкти та їхні параметри інтеграції (без секретів)',
         mimeType: 'application/json',
       },
     ];
@@ -77,49 +94,69 @@ export function createPaymockMcpServer(config: McpServerConfig = {}) {
 
   // 2. READ RESOURCE
   server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+    requireScope();
+
     const uri = request.params.uri;
 
     if (uri === 'paymock://projects') {
-      const projects = await projectsRepo.list(userId);
+      // Only the projects this session may see — and never their tokens.
+      const projects = await listAccessibleProjects(scope, projectsRepo);
+
       return {
         contents: [
           {
             uri,
             mimeType: 'application/json',
-            text: JSON.stringify(projects, null, 2),
+            text: JSON.stringify(
+              projects.map((project) => ({
+                id: project.id,
+                name: project.name,
+                edrpou: project.edrpou,
+                logo_url: project.logo_url,
+                default_webhook_url: project.default_webhook_url,
+                default_success_url: project.default_success_url,
+                default_fail_url: project.default_fail_url,
+                created_at: project.created_at,
+                updated_at: project.updated_at,
+              })),
+              null,
+              2
+            ),
           },
         ],
       };
     }
 
     const statsMatch = uri.match(/^paymock:\/\/projects\/([^/]+)\/stats$/);
-    if (statsMatch) {
-      const pId = statsMatch[1];
-      const stats = await invoicesRepo.countStats(pId);
-      return {
-        contents: [
-          {
-            uri,
-            mimeType: 'application/json',
-            text: JSON.stringify(stats, null, 2),
-          },
-        ],
-      };
-    }
-
     const recentInvoicesMatch = uri.match(/^paymock:\/\/projects\/([^/]+)\/invoices\/recent$/);
-    if (recentInvoicesMatch) {
-      const pId = recentInvoicesMatch[1];
-      const invoices = await invoicesRepo.list({ projectId: pId, limit: 10 });
-      return {
-        contents: [
-          {
-            uri,
-            mimeType: 'application/json',
-            text: JSON.stringify(invoices, null, 2),
-          },
-        ],
-      };
+
+    if (statsMatch || recentInvoicesMatch) {
+      const projectId = (statsMatch ?? recentInvoicesMatch)![1];
+
+      try {
+        // The same guard the tools use — resources are not a second, weaker
+        // door into the data.
+        const project = await assertProjectAccess(scope, projectId, projectsRepo);
+
+        const payload = statsMatch
+          ? await invoicesRepo.countStats(project.id)
+          : await invoicesRepo.list({ projectId: project.id, limit: 10 });
+
+        return {
+          contents: [
+            {
+              uri,
+              mimeType: 'application/json',
+              text: JSON.stringify(payload, null, 2),
+            },
+          ],
+        };
+      } catch (err) {
+        if (err instanceof ScopeError) {
+          throw new Error(SCOPE_ERROR_MESSAGE);
+        }
+        throw err;
+      }
     }
 
     throw new Error(`Resource not found: ${uri}`);
@@ -137,6 +174,8 @@ export function createPaymockMcpServer(config: McpServerConfig = {}) {
     const { name, arguments: args } = request.params;
 
     try {
+      requireScope();
+
       return await executeMcpTool({
         toolName: name,
         args,
@@ -147,9 +186,12 @@ export function createPaymockMcpServer(config: McpServerConfig = {}) {
         webhooksRepo,
       });
     } catch (err: any) {
+      const message =
+        err instanceof ScopeError ? SCOPE_ERROR_MESSAGE : err.message || String(err);
+
       return {
         isError: true,
-        content: [{ type: 'text', text: `Помилка виконання інструменту ${name}: ${err.message || String(err)}` }],
+        content: [{ type: 'text', text: `Помилка виконання інструменту ${name}: ${message}` }],
       };
     }
   });
