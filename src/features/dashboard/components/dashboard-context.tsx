@@ -166,6 +166,69 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     fetchData();
   }, [fetchData]);
 
+  // ---- Live updates -------------------------------------------------------
+  //
+  // A payment happens in the checkout tab or through the API/MCP surface —
+  // never inside the dashboard tab itself. Instead of asking the merchant to
+  // reload the page, the provider polls a cheap revision probe (two aggregate
+  // queries) and refetches the full dashboard only when the revision moves.
+  //
+  // Polling skips hidden tabs, and returning to the tab checks the revision
+  // immediately — the dashboard is current the moment the merchant looks at
+  // it, with at most one interval of delay otherwise.
+
+  /** Poll cadence. A probe costs two COUNT/MAX aggregates on indexed columns. */
+  const REVISION_POLL_INTERVAL_MS = 5_000;
+
+  const lastRevisionRef = React.useRef<string | null>(null);
+  const probeInFlightRef = React.useRef(false);
+
+  // The baseline is per project: switching projects must not compare against
+  // the previous project's revision.
+  React.useEffect(() => {
+    lastRevisionRef.current = null;
+  }, [selectedProjectIdParam]);
+
+  const checkRevision = React.useCallback(async () => {
+    if (probeInFlightRef.current) return;
+    if (!isLoaded || !isSignedIn) return;
+    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+
+    probeInFlightRef.current = true;
+    try {
+      const data = await projectsApi.getRevision(selectedProjectIdParam || undefined, {
+        headers: authHeaders,
+      });
+
+      // The first probe of a session/project only records the baseline.
+      if (lastRevisionRef.current !== null && data.revision !== lastRevisionRef.current) {
+        await fetchData();
+      }
+      lastRevisionRef.current = data.revision;
+    } catch {
+      // A failed probe is expected (offline, throttled) — the next tick retries.
+    } finally {
+      probeInFlightRef.current = false;
+    }
+  }, [selectedProjectIdParam, isLoaded, isSignedIn, authHeaders, fetchData]);
+
+  React.useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
+
+    const interval = setInterval(checkRevision, REVISION_POLL_INTERVAL_MS);
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        checkRevision();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [checkRevision, isLoaded, isSignedIn]);
+
   const selectedProject = projects.find((p) => p.id === selectedProjectIdParam) || projects[0] || null;
   const selectedProjectId = selectedProject ? selectedProject.id : '';
 

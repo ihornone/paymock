@@ -1,16 +1,16 @@
 import { redirect } from 'next/navigation';
-import { requireDocsSession } from '@/features/docs/server/docs-session';
+import { getDocsActor } from '@/features/docs/server/docs-session';
 
 /**
- * The documentation is an account-scoped surface, so the page is rendered
- * per request: a static build would put the whole contract of the platform
- * into publicly reachable files.
+ * The documentation is a public surface: every article is readable without
+ * a session. The page is still rendered per request, because the articles
+ * interpolate the deployment's own base URL.
  */
 export const dynamic = 'force-dynamic';
 
 export default async function DocsIndexPage() {
-  // An anonymous visitor never reaches the articles.
-  await requireDocsSession();
+  // Never throws for an anonymous visitor — the docs stay open.
+  await getDocsActor();
 
   redirect('/docs/overview');
 }

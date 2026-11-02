@@ -149,6 +149,21 @@ export function CheckoutClient({ invoice, project }: CheckoutClientProps) {
     }
   }, [invoice.basket_json]);
 
+  // Sandbox integrity check: the contract binds the basket to the same units
+  // as `amount` (kopiyky). An integration that sends hryvnias in the basket
+  // while the invoice total is in kopiyky renders items that do not add up to
+  // the invoice — surface the mismatch instead of silently showing numbers
+  // that make the integrator doubt the display.
+  const basketTotal = React.useMemo(
+    () =>
+      basket.reduce(
+        (acc, item) => acc + (item.total ?? (item.sum * (item.qty || 1) || 0)),
+        0
+      ),
+    [basket]
+  );
+  const basketMismatch = basket.length > 0 && basketTotal !== invoice.amount;
+
   const targetUrl = invoice.success_url || invoice.redirect_url;
 
   // Emit postMessage to parent window / opener (supports modals, iframes & popups on merchant site)
@@ -359,6 +374,17 @@ export function CheckoutClient({ invoice, project }: CheckoutClientProps) {
 
                   {basket.length > 0 ? (
                     <div className="space-y-3 divide-y divide-border/60 max-h-56 sm:max-h-72 overflow-y-auto pr-1">
+                      {basketMismatch && (
+                        <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] sm:text-xs text-amber-300">
+                          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                          <span>
+                            Сума позицій кошика ({formatCurrencyAmount(basketTotal, invoice.ccy)}) не збігається
+                            із сумою інвойсу ({formatCurrencyAmount(invoice.amount, invoice.ccy)}). Ймовірно,
+                            кошик передано в гривнях замість копійок — сума позицій має збігатися з{' '}
+                            <code className="font-mono">amount</code>. Платіж буде проведено за сумою інвойсу.
+                          </span>
+                        </div>
+                      )}
                       {basket.map((item, idx) => {
                         const itemPhoto = item.icon || item.img || item.image || item.picture || null;
                         return (

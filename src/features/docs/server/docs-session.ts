@@ -1,15 +1,15 @@
 import { cookies, headers } from 'next/headers';
-import { redirect } from 'next/navigation';
 import { NextRequest } from 'next/server';
 import { authenticateRequest, type AuthActor } from '@/server/auth/session';
 
 /**
- * Access control for the documentation.
+ * Session resolution for the documentation.
  *
- * The docs describe the whole contract of the platform, including the
- * account-scoped endpoints — that is a map of the internal API for anybody
- * who reads it. They are therefore rendered only for an authenticated
- * account.
+ * The docs are a public surface: every article is readable by an anonymous
+ * visitor, because the documentation is the first thing an integrating
+ * merchant reads. Personalization is opt-in — when a request does carry a
+ * credential, the pages can use the actor (e.g. to offer token management);
+ * when it does not, they render with a placeholder instead.
  *
  * The credential rules live in `authenticateRequest`: an account token
  * (`pmk_usr_…`), a Clerk session (JWT in `Authorization: Bearer` or in the
@@ -20,14 +20,9 @@ import { authenticateRequest, type AuthActor } from '@/server/auth/session';
  */
 
 /**
- * The route an anonymous visitor is sent to. It answers with a real 401, so
- * an automated client sees the refusal instead of a successful response.
- */
-const UNAUTHORIZED_PATH = '/docs/unauthorized';
-
-/**
  * Resolves the actor of a documentation request, or `null` when the request
- * carries no usable credential.
+ * carries no usable credential. An anonymous visitor is never an error: the
+ * article content is public, only the token-bound extras are stubbed out.
  */
 export async function getDocsActor(): Promise<AuthActor | null> {
   const requestHeaders = new Headers(await headers());
@@ -54,19 +49,11 @@ export async function getDocsActor(): Promise<AuthActor | null> {
     headers: requestHeaders,
   });
 
-  return authenticateRequest(request);
-}
-
-/**
- * Guards a documentation page.
- *
- * Throws (a redirect) when the visitor is not authenticated — the article
- * content is never rendered for an anonymous request.
- */
-export async function requireDocsSession(): Promise<AuthActor> {
-  const actor = await getDocsActor();
-  if (!actor) {
-    redirect(UNAUTHORIZED_PATH);
+  try {
+    return await authenticateRequest(request);
+  } catch {
+    // A malformed credential must not break the public page: the docs render
+    // anonymously and the visitor is told how to authenticate properly.
+    return null;
   }
-  return actor;
 }

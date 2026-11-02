@@ -1,4 +1,4 @@
-import { eq, and, desc, lt } from 'drizzle-orm';
+import { eq, and, desc, lt, sql } from 'drizzle-orm';
 import { getDrizzle } from './drizzle';
 import { webhookLogs } from './schema';
 import * as schema from './schema';
@@ -167,5 +167,27 @@ export class WebhooksRepository {
       .returning({ id: webhookLogs.id });
 
     return deleted.length;
+  }
+
+  /**
+   * Change fingerprint of a project's delivery log: row count plus the newest
+   * `created_at`. A new webhook attempt moves at least one of them, which the
+   * dashboard poller uses to detect fresh delivery results without listing.
+   */
+  async getRevision(projectId: string): Promise<{ count: number; maxCreated: string | null }> {
+    const db = await getDrizzle();
+
+    const [row] = await db
+      .select({
+        count: sql<number>`cast(count(*) as integer)`,
+        maxCreated: sql<string | null>`max(${webhookLogs.created_at})`,
+      })
+      .from(webhookLogs)
+      .where(eq(webhookLogs.project_id, projectId));
+
+    return {
+      count: Number(row?.count) || 0,
+      maxCreated: row?.maxCreated ?? null,
+    };
   }
 }

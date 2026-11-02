@@ -8,6 +8,8 @@ import {
   IconChevronRight,
   IconChevronLeft,
   IconLayoutDashboard,
+  IconKey,
+  IconInfoCircle,
 } from '@tabler/icons-react';
 import type { DocArticle } from '@/features/docs/articles';
 import {
@@ -41,6 +43,12 @@ interface DocsShellProps {
   currentArticle?: DocArticle;
   prevArticle?: DocArticle | null;
   nextArticle?: DocArticle | null;
+  /**
+   * Whether the visitor carries a usable credential. Anonymous visitors read
+   * the same articles — the banner is the placeholder that tells them where
+   * their own token would come from.
+   */
+  isAuthenticated?: boolean;
   children: React.ReactNode;
 }
 
@@ -50,6 +58,7 @@ export function DocsShell({
   currentArticle,
   prevArticle,
   nextArticle,
+  isAuthenticated = false,
   children,
 }: DocsShellProps) {
   return (
@@ -193,6 +202,31 @@ export function DocsShell({
         {/* Article Content Container */}
         <main className="flex-1 overflow-y-auto">
           <div className="max-w-4xl mx-auto px-4 sm:px-8 py-6 sm:py-10 space-y-8">
+            {!isAuthenticated && (
+              <aside className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
+                <IconInfoCircle className="size-5 shrink-0 text-amber-400" />
+                <p className="flex-1 text-foreground/90 leading-relaxed">
+                  Ви переглядаєте документацію без авторизації — увесь контент відкритий.
+                  Щоб працювати з API, створіть персональний токен акаунта (
+                  <code className="rounded bg-amber-500/10 px-1 py-0.5 font-mono text-xs text-amber-300">
+                    pmk_usr_…
+                  </code>
+                  ) або токен проєкту (
+                  <code className="rounded bg-amber-500/10 px-1 py-0.5 font-mono text-xs text-amber-300">
+                    pmk_live_…
+                  </code>
+                  ) в особистому кабінеті.
+                </p>
+                <Link
+                  href="/profile"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+                >
+                  <IconKey className="size-3.5" />
+                  <span>Отримати токен</span>
+                </Link>
+              </aside>
+            )}
+
             {children}
 
             {/* Prev / Next Article Navigation Footer */}

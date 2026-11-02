@@ -377,4 +377,28 @@ export class InvoicesRepository {
 
     return rows.map((row) => row.invoice) as InvoiceRecord[];
   }
+
+  /**
+   * Change fingerprint of a project's invoices: row count plus the newest
+   * `modified_date`. Every status transition (payment, cancellation, expiry)
+   * bumps `modified_date`, and an insert changes both — so the pair moves on
+   * any dashboard-relevant write, while the read costs one aggregate query
+   * instead of re-listing rows.
+   */
+  async getRevision(projectId: string): Promise<{ count: number; maxModified: string | null }> {
+    const db = await getDrizzle();
+
+    const [row] = await db
+      .select({
+        count: sql<number>`cast(count(*) as integer)`,
+        maxModified: sql<string | null>`max(${invoices.modified_date})`,
+      })
+      .from(invoices)
+      .where(eq(invoices.project_id, projectId));
+
+    return {
+      count: Number(row?.count) || 0,
+      maxModified: row?.maxModified ?? null,
+    };
+  }
 }

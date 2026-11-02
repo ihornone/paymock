@@ -15,6 +15,7 @@ import {
   SCOPE_ERROR_MESSAGE,
 } from '@/server/auth/scope';
 import { MCP_TOOLS, executeMcpTool } from './tools';
+import { DOCS_ARTICLES } from '@/features/docs/articles';
 import type { McpScope } from './handlers/projects.handler';
 
 export interface McpServerConfig {
@@ -23,11 +24,20 @@ export interface McpServerConfig {
   defaultProjectId?: string | null;
 }
 
+/**
+ * The human-readable URL of a documentation article, relative to the
+ * deployment base URL. Exposed to AI clients so a model can point the
+ * merchant at the exact page that documents the endpoint it just used.
+ */
+export function docsPageUrl(baseUrl: string, slug: string): string {
+  return `${baseUrl.replace(/\/$/, '')}/docs/${slug}`;
+}
+
 export function createPaymockMcpServer(config: McpServerConfig = {}) {
   const server = new Server(
     {
       name: 'paymock-mcp-server',
-      version: '1.1.0',
+      version: '1.2.0',
     },
     {
       capabilities: {
@@ -61,18 +71,40 @@ export function createPaymockMcpServer(config: McpServerConfig = {}) {
   };
 
   // 1. LIST RESOURCES
+  //
+  // The documentation resources are deliberately listed and served without a
+  // scope: the docs are a public surface on the web, and an AI assistant that
+  // has not been configured with a scope yet still needs the contract it is
+  // supposed to integrate against.
   server.setRequestHandler(ListResourcesRequestSchema, async () => {
-    requireScope();
-
-    const projects = await listAccessibleProjects(scope, projectsRepo);
     const resources = [
       {
-        uri: 'paymock://projects',
-        name: 'Список мерчант-проєктів',
-        description: 'Доступні проєкти та їхні параметри інтеграції (без секретів)',
+        uri: 'paymock://docs',
+        name: 'Документація Paymock (індекс)',
+        description:
+          'Індекс усіх статей документації з назвами, категоріями та URL сторінок. Почніть з нього, щоб знайти потрібний розділ.',
         mimeType: 'application/json',
       },
     ];
+
+    for (const article of Object.values(DOCS_ARTICLES)) {
+      resources.push({
+        uri: `paymock://docs/${article.slug}`,
+        name: article.title,
+        description: `Документація · ${article.category} · ${docsPageUrl(baseUrl, article.slug)}`,
+        mimeType: 'text/markdown',
+      });
+    }
+
+    requireScope();
+
+    const projects = await listAccessibleProjects(scope, projectsRepo);
+    resources.push({
+      uri: 'paymock://projects',
+      name: 'Список мерчант-проєктів',
+      description: 'Доступні проєкти та їхні параметри інтеграції (без секретів)',
+      mimeType: 'application/json',
+    });
 
     for (const project of projects) {
       resources.push({
@@ -94,9 +126,63 @@ export function createPaymockMcpServer(config: McpServerConfig = {}) {
 
   // 2. READ RESOURCE
   server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
-    requireScope();
-
     const uri = request.params.uri;
+
+    // Documentation index: every article with its slug, category and page URL.
+    if (uri === 'paymock://docs') {
+      const index = Object.values(DOCS_ARTICLES).map((article) => ({
+        slug: article.slug,
+        title: article.title,
+        category: article.category,
+        badge: article.badge ?? null,
+        url: docsPageUrl(baseUrl, article.slug),
+        resource: `paymock://docs/${article.slug}`,
+      }));
+
+      return {
+        contents: [
+          {
+            uri,
+            mimeType: 'application/json',
+            text: JSON.stringify(
+              {
+                overview: 'Документація платформи Paymock. Читайте статті ресурсами paymock://docs/<slug> або відкривайте URL сторінок для людини.',
+                articles: index,
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    }
+
+    // A single documentation article, rendered as markdown. The same
+    // {{BASE_URL}} / {{HOST}} placeholders the web pages interpolate are
+    // resolved here, so examples are copy-pasteable as-is.
+    const docsMatch = uri.match(/^paymock:\/\/docs\/([a-z0-9-]+)$/);
+    if (docsMatch) {
+      const article = DOCS_ARTICLES[docsMatch[1]];
+      if (!article) {
+        throw new Error(`Documentation article not found: ${uri}`);
+      }
+
+      const markdown = article.content
+        .replace(/{{BASE_URL}}/g, baseUrl)
+        .replace(/{{HOST}}/g, new URL(baseUrl).host);
+
+      return {
+        contents: [
+          {
+            uri,
+            mimeType: 'text/markdown',
+            text: markdown,
+          },
+        ],
+      };
+    }
+
+    requireScope();
 
     if (uri === 'paymock://projects') {
       // Only the projects this session may see — and never their tokens.

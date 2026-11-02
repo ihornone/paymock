@@ -3,26 +3,26 @@ import { marked } from 'marked';
 import { DOCS_ARTICLES } from '@/features/docs/articles';
 import { DocsShell } from '@/features/docs/components/docs-shell';
 import { DocContentViewer } from '@/features/docs/components/doc-content-viewer';
-import { requireDocsSession } from '@/features/docs/server/docs-session';
+import { getDocsActor } from '@/features/docs/server/docs-session';
 
 interface DocsPageProps {
   params: Promise<{ slug: string }>;
 }
 
 /**
- * The documentation is an account-scoped surface.
+ * The documentation is a public surface.
  *
- * The page is rendered per request (`force-dynamic`) and only after the
- * session check: a static build would put the whole contract of the
- * platform — including the account-scoped endpoints — into publicly
- * reachable files. `generateStaticParams` is deliberately absent for the
- * same reason.
+ * The page is rendered per request (`force-dynamic`) so that the articles
+ * interpolate the deployment's own base URL. Anonymous visitors read the
+ * full articles — the token-bound extras (personal token in the sidebar,
+ * personalized snippets) are shown as placeholders instead of being hidden.
  */
 export const dynamic = 'force-dynamic';
 
 export default async function DocArticlePage({ params }: DocsPageProps) {
-  // The article content is only rendered for an authenticated account.
-  await requireDocsSession();
+  // A malformed credential never blocks the public article — the actor is
+  // simply treated as anonymous.
+  const actor = await getDocsActor();
 
   const { slug } = await params;
   const article = DOCS_ARTICLES[slug];
@@ -65,6 +65,7 @@ export default async function DocArticlePage({ params }: DocsPageProps) {
       currentArticle={article}
       prevArticle={prevArticle}
       nextArticle={nextArticle}
+      isAuthenticated={Boolean(actor)}
     >
       <DocContentViewer htmlContent={htmlContent} />
     </DocsShell>

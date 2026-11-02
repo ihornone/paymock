@@ -294,6 +294,42 @@ export async function GET(req: NextRequest) {
           },
         },
       },
+      '/api/admin/projects/revision': {
+        get: {
+          summary: 'Ревізія даних дашборда (cheap change probe)',
+          description:
+            'Повертає одне опакове значення `revision` — агрегати рахунків і вебхук-логів обраного проєкту. Клієнт (дашборд) опитує його з інтервалом і перевантажує повний payload `/api/admin/projects` лише тоді, коли ревізія змінилася: оплата на чекауті з\'являється у відкритому дашборді автоматично, без ручного оновлення сторінки.',
+          tags: ['Account'],
+          parameters: [
+            {
+              name: 'projectId',
+              in: 'query',
+              required: false,
+              description:
+                'Проєкт, за яким рахується ревізія. Якщо не вказано або не належить акаунту — береться перший проєкт акаунта.',
+              schema: { type: 'string' },
+            },
+          ],
+          security: ACCOUNT_SECURITY,
+          responses: {
+            '200': {
+              description: 'Поточна ревізія',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      revision: { type: 'string', example: '12:2026-11-02T10:15:00.000Z:8:2026-11-02T10:14:59.000Z' },
+                      currentProjectId: { type: ['string', 'null'] },
+                    },
+                  },
+                },
+              },
+            },
+            '401': { description: 'Недійсний або відсутній токен' },
+          },
+        },
+      },
       '/api/admin/projects/reset-token': {
         post: {
           summary: 'Ротація X-Token проєкту',

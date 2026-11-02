@@ -82,4 +82,17 @@ export const projectsApi = {
         body: { projectId },
       }
     ),
+
+  /**
+   * Change probe for the live dashboard. The revision changes whenever a
+   * payment, cancellation or webhook delivery touches the project, so the
+   * dashboard refetches itself only when this value moves.
+   */
+  getRevision: (projectId?: string, options?: ApiRequestOptions) =>
+    apiRequest<{ revision: string; currentProjectId: string | null }>(
+      projectId
+        ? `/api/admin/projects/revision?projectId=${encodeURIComponent(projectId)}`
+        : '/api/admin/projects/revision',
+      options
+    ),
 };
