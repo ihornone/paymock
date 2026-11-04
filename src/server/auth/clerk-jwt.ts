@@ -15,6 +15,8 @@
  * unexpected algorithm or an expired token all resolve to `null`.
  */
 
+import { readRuntimeEnv } from '@/shared/config/runtime-env';
+
 export interface VerifiedClerkSession {
   userId: string;
   sessionId: string | null;
@@ -65,7 +67,7 @@ let instanceCache: ClerkInstance | null = null;
 export function getClerkInstance(): ClerkInstance | null {
   if (instanceCache) return instanceCache;
 
-  const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+  const publishableKey = readRuntimeEnv('NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY');
   if (!publishableKey) return null;
 
   const parts = publishableKey.split('_');
@@ -100,7 +102,7 @@ export function getClerkInstance(): ClerkInstance | null {
  * one in production is a configuration mistake, not a choice.
  */
 export function isClerkDevInstance(): boolean {
-  const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || '';
+  const publishableKey = readRuntimeEnv('NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY') || '';
   return publishableKey.startsWith('pk_test_');
 }
 

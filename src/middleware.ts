@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
+import { readRuntimeEnv } from '@/shared/config/runtime-env';
+
 /**
  * Content Security Policy with a per-request nonce.
  *
@@ -52,7 +54,7 @@ function getClerkApiOrigin(publishableKey: string | undefined): string | null {
 }
 
 function buildContentSecurityPolicy(nonce: string): string {
-  const clerkOrigin = getClerkApiOrigin(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+  const clerkOrigin = getClerkApiOrigin(readRuntimeEnv('NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY'));
   const clerkOrigins = clerkOrigin ? ` ${clerkOrigin}` : '';
 
   return [
