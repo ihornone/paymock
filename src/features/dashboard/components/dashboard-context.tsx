@@ -177,16 +177,29 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   // immediately — the dashboard is current the moment the merchant looks at
   // it, with at most one interval of delay otherwise.
 
-  /** Poll cadence. A probe costs two COUNT/MAX aggregates on indexed columns. */
-  const REVISION_POLL_INTERVAL_MS = 5_000;
+  /**
+   * Poll cadence with adaptive backoff.
+   *
+   * A probe costs two COUNT/MAX aggregates on indexed columns plus a Worker
+   * invocation, so a dashboard that just sits open must not tick at a fixed
+   * rate. The cadence starts fast enough for a payment to land within seconds
+   * of an active burst and relaxes towards the 30 s ceiling while nothing
+   * changes; any change, or the merchant returning to the tab, snaps it back
+   * to the base interval. Hidden tabs do not probe at all.
+   */
+  const REVISION_POLL_BASE_MS = 10_000;
+  const REVISION_POLL_MAX_MS = 30_000;
+  const REVISION_POLL_BACKOFF = 1.5;
 
   const lastRevisionRef = React.useRef<string | null>(null);
   const probeInFlightRef = React.useRef(false);
+  const pollDelayRef = React.useRef(REVISION_POLL_BASE_MS);
 
   // The baseline is per project: switching projects must not compare against
   // the previous project's revision.
   React.useEffect(() => {
     lastRevisionRef.current = null;
+    pollDelayRef.current = REVISION_POLL_BASE_MS;
   }, [selectedProjectIdParam]);
 
   const checkRevision = React.useCallback(async () => {
@@ -204,6 +217,12 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       if (lastRevisionRef.current !== null && data.revision !== lastRevisionRef.current) {
         await fetchData();
       }
+      // Adjust the cadence: a moving revision means the merchant is active —
+      // stay fast; a still revision means the tab can relax.
+      pollDelayRef.current =
+        data.revision !== lastRevisionRef.current
+          ? REVISION_POLL_BASE_MS
+          : Math.min(pollDelayRef.current * REVISION_POLL_BACKOFF, REVISION_POLL_MAX_MS);
       lastRevisionRef.current = data.revision;
     } catch {
       // A failed probe is expected (offline, throttled) — the next tick retries.
@@ -215,16 +234,28 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   React.useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
 
-    const interval = setInterval(checkRevision, REVISION_POLL_INTERVAL_MS);
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleNext = () => {
+      timer = setTimeout(async () => {
+        await checkRevision();
+        scheduleNext();
+      }, pollDelayRef.current);
+    };
+    scheduleNext();
+
     const onVisibility = () => {
       if (document.visibilityState === 'visible') {
-        checkRevision();
+        // The dashboard is current the moment the merchant looks at it.
+        pollDelayRef.current = REVISION_POLL_BASE_MS;
+        if (timer) clearTimeout(timer);
+        scheduleNext();
+        void checkRevision();
       }
     };
     document.addEventListener('visibilitychange', onVisibility);
 
     return () => {
-      clearInterval(interval);
+      if (timer) clearTimeout(timer);
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [checkRevision, isLoaded, isSignedIn]);

@@ -19,4 +19,4 @@ head_sampling_rate = 1
 
 [vars]
 NEXT_PUBLIC_APP_URL = "https://paymock.ihornone.site"
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY = "pk_test_c3dlZXBpbmctaGVycmluZy00OTIuY2xlcmsuYWNjb3VudHMuZGV2JA"
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY = "pk_live_Y2xlcmsucGF5bW9jay5paG9ybm9uZS5zaXRlJA"
