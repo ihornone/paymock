@@ -1,54 +1,14 @@
 #!/usr/bin/env tsx
-/**
- * Exports the D1 database to a JSON file.
- *
- * D1 has no built-in "dump" endpoint like a local SQLite file, and the
- * Workers runtime never materialises the database on disk — so the only way
- * to take a backup is to read every table through the API.
- *
- * Two properties matter for this script:
- *
- *   1. It must not fail halfway and leave a half-written file that looks
- *      like a complete backup. The file is written once, at the end, and a
- *      table that could not be read is recorded as an error inside the file.
- *
- *   2. It must not become a secret-leaking artefact. `token_hash`,
- *      `webhook_secret` and the legacy plaintext `token` column are
- *      replaced with a marker by default. The hashes are one-way, but the
- *      webhook secret is not — it signs outgoing webhooks — and a backup
- *      that is committed to Git turns it into a shared credential.
- *
- *      `--include-secrets` keeps the raw values. Use it only for an
- *      encrypted, access-controlled copy.
- *
- * Usage:
- *   CLOUDFLARE_API_TOKEN=… tsx scripts/cloudflare/backup-d1.ts
- *   … --out /secure/place/d1.json
- *   … --include-secrets
- *
- * The API token is only ever sent in the `Authorization` header.
- */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-/** The repository root — the scripts live in `scripts/cloudflare/`. */
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 const API_BASE = 'https://api.cloudflare.com/client/v4';
 
-/**
- * The Cloudflare API token.
- *
- * `CLOUDFLARE_API_TOKEN` wins. When it is absent, the OAuth token that
- * `wrangler login` wrote into the Wrangler config is used — the same
- * fallback as `scripts/d1-client.ts`, so an operator who is already logged
- * in does not have to export anything.
- *
- * The token is never printed.
- */
 let cachedToken: string | null = null;
 
 function getApiToken(): string {
@@ -77,20 +37,12 @@ function getApiToken(): string {
       }
     }
   } catch {
-    // The config is unreadable (missing home directory, permissions) — the
-    // environment variable is the only remaining source.
   }
 
   cachedToken = '';
   return cachedToken;
 }
 
-/**
- * The Cloudflare account id.
- *
- * `CLOUDFLARE_ACCOUNT_ID` wins; otherwise the id is taken from
- * `wrangler.toml`, which is where the deployment is configured anyway.
- */
 function getAccountId(): string {
   const fromEnv = process.env.CLOUDFLARE_ACCOUNT_ID;
   if (fromEnv) return fromEnv.trim();
@@ -100,20 +52,11 @@ function getAccountId(): string {
     const match = content.match(/^\s*account_id\s*=\s*"([^"]+)"/m);
     if (match?.[1]) return match[1];
   } catch {
-    // No wrangler.toml in the checkout — the environment variable is the
-    // only remaining source.
   }
 
   return '';
 }
 
-/**
- * The database id.
- *
- * It is not a secret, but it differs per environment, so it is read from the
- * environment first and only then from `wrangler.toml` — so the script
- * always targets the database the deployment actually uses.
- */
 function getDatabaseId(): string {
   const fromEnv = process.env.CLOUDFLARE_DATABASE_ID;
   if (fromEnv) return fromEnv.trim();
@@ -123,19 +66,11 @@ function getDatabaseId(): string {
     const match = content.match(/database_id\s*=\s*"([^"]+)"/);
     if (match?.[1]) return match[1];
   } catch {
-    // No wrangler.toml in the checkout.
   }
 
   return '263234ee-228e-4b8c-81a9-57777ad70bbc';
 }
 
-/**
- * The tables to export.
- *
- * The SQL is written out literally for every table: a template string here
- * would be exactly the string interpolation that `scripts/lint-sql.ts`
- * forbids, and the table list is static anyway.
- */
 const TABLES: ReadonlyArray<{ name: string; sql: string }> = [
   { name: 'projects', sql: 'SELECT * FROM projects' },
   { name: 'invoices', sql: 'SELECT * FROM invoices' },
@@ -144,9 +79,6 @@ const TABLES: ReadonlyArray<{ name: string; sql: string }> = [
   { name: 'audit_log', sql: 'SELECT * FROM audit_log' },
 ];
 
-/**
- * Columns whose values are replaced with the redaction marker.
- */
 const SECRET_COLUMNS = [
   'token',
   'token_hash',
@@ -173,10 +105,6 @@ const WARNING = [
   'that reason — keep the copy outside the repository and encrypt it.',
 ].join('\n');
 
-/* ------------------------------------------------------------------ *
- * CLI
- * ------------------------------------------------------------------ */
-
 interface Options {
   out: string | undefined;
   includeSecrets: boolean;
@@ -198,18 +126,8 @@ function parseArgs(argv: string[]): Options {
   return options;
 }
 
-/* ------------------------------------------------------------------ *
- * Redaction
- * ------------------------------------------------------------------ */
-
 type Row = Record<string, unknown>;
 
-/**
- * Replaces the values of the secret columns with a marker.
- *
- * The column names are matched case-insensitively because a migrated schema
- * may still carry the legacy plaintext `token` column.
- */
 function redactRows(rows: Row[]): { rows: Row[]; redactedColumns: string[] } {
   const found = new Set<string>();
   const result = rows.map((row) => {
@@ -228,19 +146,12 @@ function redactRows(rows: Row[]): { rows: Row[]; redactedColumns: string[] } {
   return { rows: result, redactedColumns: [...found].sort() };
 }
 
-/* ------------------------------------------------------------------ *
- * Cloudflare API
- * ------------------------------------------------------------------ */
-
 interface QueryResponse {
   result?: Array<{ results?: Row[]; success?: boolean; meta?: { changes?: number } }>;
   success: boolean;
   errors?: Array<{ code?: number; message?: string }>;
 }
 
-/**
- * Runs one SQL statement against the database.
- */
 async function query(sql: string): Promise<Row[]> {
   const apiToken = getApiToken();
   const accountId = getAccountId();
@@ -276,10 +187,6 @@ async function query(sql: string): Promise<Row[]> {
 
   return payload.result?.[0]?.results ?? [];
 }
-
-/* ------------------------------------------------------------------ *
- * Entry point
- * ------------------------------------------------------------------ */
 
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));

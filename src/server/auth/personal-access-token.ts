@@ -4,16 +4,6 @@ import { personalAccessTokens } from '@/server/db/schema';
 import { randomString } from '@/shared/utils/id';
 import { logger } from '@/shared/logger';
 
-/**
- * Personal access tokens (PAT).
- *
- * The account-wide API and the MCP server are authenticated with a PAT. Only
- * the SHA-256 hash of the token is stored, so a leaked database row cannot be
- * replayed against the API.
- *
- * The token is a random 32-character string with a `pmk_usr_` prefix. It is
- * shown to the user once, at generation time.
- */
 export const PERSONAL_ACCESS_TOKEN_PREFIX = 'pmk_usr_';
 export const PERSONAL_ACCESS_TOKEN_LENGTH = 32;
 export const PERSONAL_ACCESS_TOKEN_NAME = 'default';
@@ -25,13 +15,6 @@ export interface PersonalAccessToken {
   createdAt: string;
 }
 
-/**
- * Hashes a token for storage and lookup.
- *
- * SHA-256 is appropriate here: the token has 32 characters of entropy from a
- * CSPRNG, so there is nothing to brute-force — the hash does not need to be
- * slow.
- */
 export async function hashToken(token: string): Promise<string> {
   const data = new TextEncoder().encode(token);
   const digest = await crypto.subtle.digest('SHA-256', data);
@@ -44,10 +27,6 @@ export function isPersonalAccessToken(token: string): boolean {
   return token.startsWith(PERSONAL_ACCESS_TOKEN_PREFIX);
 }
 
-/**
- * Creates a personal access token for a user, replacing any previous token
- * with the same name.
- */
 export async function createPersonalAccessToken(
   userId: string,
   name: string = PERSONAL_ACCESS_TOKEN_NAME
@@ -60,7 +39,6 @@ export async function createPersonalAccessToken(
   const tokenHash = await hashToken(token);
   const now = new Date().toISOString();
 
-  // Only one active token per name — generating a new one revokes the old.
   await db
     .update(personalAccessTokens)
     .set({ revoked_at: now })
@@ -86,11 +64,6 @@ export async function createPersonalAccessToken(
   return { id, userId, token, createdAt: now };
 }
 
-/**
- * Resolves a personal access token to its owner.
- *
- * Returns `null` for an unknown or revoked token.
- */
 export async function verifyPersonalAccessToken(token: string): Promise<string | null> {
   if (!isPersonalAccessToken(token)) return null;
 
@@ -110,7 +83,6 @@ export async function verifyPersonalAccessToken(token: string): Promise<string |
 
   if (!record) return null;
 
-  // Best-effort usage stamp — a failure here must not break authentication.
   void db
     .update(personalAccessTokens)
     .set({ last_used_at: new Date().toISOString() })
@@ -121,9 +93,6 @@ export async function verifyPersonalAccessToken(token: string): Promise<string |
   return record.user_id;
 }
 
-/**
- * Revokes every active token of a user.
- */
 export async function revokePersonalAccessTokens(
   userId: string,
   name?: string
@@ -150,10 +119,6 @@ export async function revokePersonalAccessTokens(
   return revoked.length;
 }
 
-/**
- * Metadata about a user's active tokens — the token value itself is never
- * recoverable from storage.
- */
 export async function listPersonalAccessTokens(
   userId: string
 ): Promise<Array<{ id: string; name: string; createdAt: string; lastUsedAt: string | null }>> {

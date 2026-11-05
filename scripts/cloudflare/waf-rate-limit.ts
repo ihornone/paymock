@@ -1,36 +1,4 @@
 #!/usr/bin/env tsx
-/**
- * Creates (or lists) the Cloudflare rate-limiting rules that protect the
- * Paymock API.
- *
- * The application has its own in-isolate rate limiter, but that limiter only
- * lives inside one Worker isolate: it is a per-instance counter, so it is
- * both trivially bypassed by spreading the traffic over instances and
- * invisible to the edge. A Cloudflare rate-limiting rule is enforced before
- * the request ever reaches the Worker, which is the only place where the
- * limit actually holds against an attacker.
- *
- * Two rules are managed:
- *
- *   POST /api/admin/projects  — 5 requests/minute per IP.
- *     Creating a project is a rare, human action. Five per minute is far
- *     above any legitimate use and far below anything useful for an attack.
- *
- *   /api/mcp                 — 60 requests/minute per IP.
- *     The MCP endpoint is machine-facing, so the limit is looser; it still
- *     stops the "one request, one invoice" abuse pattern.
- *
- * The rules are identified by their `description`, so re-running the script
- * updates the managed rules and leaves every other rule in the zone alone.
- *
- * Usage:
- *   CLOUDFLARE_API_TOKEN=… CLOUDFLARE_ZONE_ID=… tsx scripts/cloudflare/waf-rate-limit.ts
- *   … --list       # only print the rules that are currently configured
- *   … --dry-run    # print the JSON payload without calling the API
- *
- * The API token is only ever sent in the `Authorization` header — it is
- * never printed, not even in an error message.
- */
 
 const API_BASE = 'https://api.cloudflare.com/client/v4';
 
@@ -39,19 +7,8 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-/** The repository root — the scripts live in `scripts/cloudflare/`. */
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
-/**
- * The Cloudflare API token.
- *
- * `CLOUDFLARE_API_TOKEN` wins. When it is absent, the OAuth token that
- * `wrangler login` wrote into the Wrangler config is used — the same
- * fallback as `scripts/d1-client.ts`, so an operator who is already logged
- * in does not have to export anything.
- *
- * The token is never printed.
- */
 let cachedToken: string | null = null;
 
 function getApiToken(): string {
@@ -80,20 +37,12 @@ function getApiToken(): string {
       }
     }
   } catch {
-    // The config is unreadable (missing home directory, permissions) — the
-    // environment variable is the only remaining source.
   }
 
   cachedToken = '';
   return cachedToken;
 }
 
-/**
- * The Cloudflare account id.
- *
- * `CLOUDFLARE_ACCOUNT_ID` wins; otherwise the id is taken from
- * `wrangler.toml`, which is where the deployment is configured anyway.
- */
 function getAccountId(): string {
   const fromEnv = process.env.CLOUDFLARE_ACCOUNT_ID;
   if (fromEnv) return fromEnv.trim();
@@ -103,22 +52,14 @@ function getAccountId(): string {
     const match = content.match(/^\s*account_id\s*=\s*"([^"]+)"/m);
     if (match?.[1]) return match[1];
   } catch {
-    // No wrangler.toml in the checkout — the environment variable is the
-    // only remaining source.
   }
 
   return '';
 }
 
-/** The phase that holds the rate-limiting rules of a zone. */
 const RATE_LIMIT_PHASE = 'http_ratelimit';
 
-/** Prefix that marks a rule as managed by this script. */
 const RULE_PREFIX = 'paymock:ratelimit';
-
-/* ------------------------------------------------------------------ *
- * CLI
- * ------------------------------------------------------------------ */
 
 interface Options {
   dryRun: boolean;
@@ -156,23 +97,12 @@ function parseArgs(argv: string[]): Options {
   return options;
 }
 
-/* ------------------------------------------------------------------ *
- * Cloudflare API
- * ------------------------------------------------------------------ */
-
 interface ApiResult<T> {
   success: boolean;
   errors: Array<{ code?: number; message?: string }>;
   result: T;
 }
 
-/**
- * Calls the Cloudflare API and turns a failure into a readable error.
- *
- * The response body is included in the message because the Cloudflare error
- * codes are the only useful diagnostic here ("this plan has no rate limiting"
- * vs. "you are not allowed to edit this zone").
- */
 async function cfFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const apiToken = getApiToken();
   if (!apiToken) {
@@ -209,12 +139,6 @@ async function cfFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   return payload.result;
 }
 
-/**
- * Resolves the zone id.
- *
- * `CLOUDFLARE_ZONE_ID` wins; otherwise the zone is looked up by name — a
- * zone id is not a secret, but hard-coding one per developer is a pain.
- */
 async function resolveZoneId(options: Options): Promise<string> {
   const explicit = process.env.CLOUDFLARE_ZONE_ID;
   if (explicit) return explicit;
@@ -235,10 +159,6 @@ async function resolveZoneId(options: Options): Promise<string> {
 
   return zones[0].id;
 }
-
-/* ------------------------------------------------------------------ *
- * Rules
- * ------------------------------------------------------------------ */
 
 interface RateLimitRule {
   description: string;
@@ -261,9 +181,6 @@ interface Ruleset {
   rules: RateLimitRule[];
 }
 
-/**
- * Builds the rules this script manages.
- */
 function buildManagedRules(options: Options): RateLimitRule[] {
   return [
     {
@@ -294,12 +211,6 @@ function buildManagedRules(options: Options): RateLimitRule[] {
   ];
 }
 
-/**
- * Reads the entry-point ruleset of the rate-limiting phase.
- *
- * Cloudflare answers 404 when the zone has no such ruleset yet — that is the
- * normal starting point, not an error.
- */
 async function getRateLimitRuleset(zoneId: string): Promise<Ruleset | null> {
   try {
     const ruleset = await cfFetch<Ruleset>(
@@ -312,10 +223,6 @@ async function getRateLimitRuleset(zoneId: string): Promise<Ruleset | null> {
     throw error;
   }
 }
-
-/* ------------------------------------------------------------------ *
- * Entry point
- * ------------------------------------------------------------------ */
 
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
@@ -343,9 +250,6 @@ async function main(): Promise<void> {
   try {
     existing = await getRateLimitRuleset(zoneId);
   } catch (error: unknown) {
-    // A dry run has to work even when the token cannot read the zone — the
-    // payload is exactly what the operator wants to see, and that is often
-    // the moment when the token is not (yet) allowed to touch the zone.
     if (!options.dryRun) throw error;
     rulesetReadError = error instanceof Error ? error.message : String(error);
     console.log('');
@@ -377,7 +281,6 @@ async function main(): Promise<void> {
 
   const managedRules = buildManagedRules(options);
 
-  // Keep every rule this script does not own, and replace the ones it does.
   const foreignRules = (existing?.rules || []).filter(
     (rule) => !rule.description?.startsWith(RULE_PREFIX)
   );
@@ -432,7 +335,6 @@ main().catch((error: unknown) => {
 
   const options = parseArgs(process.argv.slice(2));
 
-  // A `--list` run changes nothing, so there is no payload to fall back to.
   if (!options.list) {
     console.error('The rules were not applied. The payload below can be pasted into');
     console.error('the Cloudflare dashboard (Rules → Rate limiting) as a fallback:');
@@ -451,7 +353,6 @@ main().catch((error: unknown) => {
         )
       );
     } catch {
-      // The fallback payload is a convenience; the error above is the real report.
     }
     console.error('');
   }

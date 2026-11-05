@@ -21,8 +21,8 @@ export interface BasketDiscount {
 export interface BasketItem {
   name: string;
   qty: number;
-  sum: number; // in cents
-  total?: number; // in cents
+  sum: number;
+  total?: number;
   icon?: string | null;
   img?: string | null;
   image?: string | null;

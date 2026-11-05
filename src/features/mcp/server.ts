@@ -24,11 +24,6 @@ export interface McpServerConfig {
   defaultProjectId?: string | null;
 }
 
-/**
- * The human-readable URL of a documentation article, relative to the
- * deployment base URL. Exposed to AI clients so a model can point the
- * merchant at the exact page that documents the endpoint it just used.
- */
 export function docsPageUrl(baseUrl: string, slug: string): string {
   return `${baseUrl.replace(/\/$/, '')}/docs/${slug}`;
 }
@@ -55,11 +50,6 @@ export function createPaymockMcpServer(config: McpServerConfig = {}) {
   const userId = config.userId || process.env.PAYMOCK_USER_ID || null;
   const defaultProjectId = config.defaultProjectId || process.env.PAYMOCK_PROJECT_ID || null;
 
-  // The stdio server is configured with explicit environment variables, so it
-  // always resolves to exactly one scope: a single project, or a whole user.
-  //
-  // A session without a scope sees nothing: the previous code fell back to
-  // "list every project in the table" when no user id was configured.
   const scope: McpScope = defaultProjectId
     ? { userId: null, projectId: defaultProjectId }
     : { userId, projectId: null };
@@ -70,12 +60,6 @@ export function createPaymockMcpServer(config: McpServerConfig = {}) {
     }
   };
 
-  // 1. LIST RESOURCES
-  //
-  // The documentation resources are deliberately listed and served without a
-  // scope: the docs are a public surface on the web, and an AI assistant that
-  // has not been configured with a scope yet still needs the contract it is
-  // supposed to integrate against.
   server.setRequestHandler(ListResourcesRequestSchema, async () => {
     const resources = [
       {
@@ -124,11 +108,9 @@ export function createPaymockMcpServer(config: McpServerConfig = {}) {
     return { resources };
   });
 
-  // 2. READ RESOURCE
   server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
     const uri = request.params.uri;
 
-    // Documentation index: every article with its slug, category and page URL.
     if (uri === 'paymock://docs') {
       const index = Object.values(DOCS_ARTICLES).map((article) => ({
         slug: article.slug,
@@ -157,9 +139,6 @@ export function createPaymockMcpServer(config: McpServerConfig = {}) {
       };
     }
 
-    // A single documentation article, rendered as markdown. The same
-    // {{BASE_URL}} / {{HOST}} placeholders the web pages interpolate are
-    // resolved here, so examples are copy-pasteable as-is.
     const docsMatch = uri.match(/^paymock:\/\/docs\/([a-z0-9-]+)$/);
     if (docsMatch) {
       const article = DOCS_ARTICLES[docsMatch[1]];
@@ -185,7 +164,6 @@ export function createPaymockMcpServer(config: McpServerConfig = {}) {
     requireScope();
 
     if (uri === 'paymock://projects') {
-      // Only the projects this session may see — and never their tokens.
       const projects = await listAccessibleProjects(scope, projectsRepo);
 
       return {
@@ -220,8 +198,6 @@ export function createPaymockMcpServer(config: McpServerConfig = {}) {
       const projectId = (statsMatch ?? recentInvoicesMatch)![1];
 
       try {
-        // The same guard the tools use — resources are not a second, weaker
-        // door into the data.
         const project = await assertProjectAccess(scope, projectId, projectsRepo);
 
         const payload = statsMatch
@@ -248,14 +224,12 @@ export function createPaymockMcpServer(config: McpServerConfig = {}) {
     throw new Error(`Resource not found: ${uri}`);
   });
 
-  // 3. LIST TOOLS
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
       tools: MCP_TOOLS,
     };
   });
 
-  // 4. CALL TOOL
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
 

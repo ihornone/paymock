@@ -1,8 +1,4 @@
-/**
- * Pure MCP tool schemas and definitions.
- */
 export const MCP_TOOLS = [
-  // 1. Projects Management (Account Level)
   {
     name: 'list_projects',
     description: 'Отримати перелік усіх проєктів поточного користувача з їхніми ID, назвами, токенами авторизації (X-Token) та налаштуваннями.',
@@ -69,7 +65,6 @@ export const MCP_TOOLS = [
     },
   },
 
-  // 2. Invoices Management
   {
     name: 'create_invoice',
     description: 'Створити рахунок на оплату (інвойс), отримати готове посилання на чекаут (pageUrl) та глибоке посилання (appUrl).',
@@ -145,7 +140,6 @@ export const MCP_TOOLS = [
     },
   },
 
-  // 3. Testing & Webhooks
   {
     name: 'simulate_payment',
     description: 'Симулювати проведення оплати рахунку (успіх або відхилення), автоматично відправити Webhook на бекенд мерчанта.',

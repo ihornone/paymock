@@ -27,19 +27,10 @@ interface DocsSidebarProps {
   categories: Record<string, DocArticle[]>;
 }
 
-/**
- * The docs variant of the shared sidebar.
- *
- * Entirely props-driven: no Clerk context, no dashboard provider — public
- * docs pages must not pull the Clerk SDK. The article tree is the only
- * navigation; the way back to the panel is the brand-less "Панель
- * керування" breadcrumb in the shared header.
- */
 export function DocsSidebar({ slug, categories }: DocsSidebarProps) {
 
   return (
     <Sidebar variant="inset" collapsible="icon">
-      {/* 1. Header: Paymock Docs Branding */}
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
@@ -66,7 +57,6 @@ export function DocsSidebar({ slug, categories }: DocsSidebarProps) {
         </SidebarMenu>
       </SidebarHeader>
 
-      {/* 2. Content: documentation article tree */}
       <SidebarContent>
         {Object.entries(categories).map(([category, items]) => (
           <SidebarGroup key={category}>
@@ -113,7 +103,6 @@ export function DocsSidebar({ slug, categories }: DocsSidebarProps) {
         ))}
       </SidebarContent>
 
-      {/* 3. Footer: OpenAPI specification */}
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>

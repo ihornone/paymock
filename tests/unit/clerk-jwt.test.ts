@@ -1,15 +1,6 @@
 import assert from 'node:assert';
 import { verifyRs256Jwt } from '../../src/server/auth/clerk-jwt';
 
-/**
- * Tests for the Clerk session JWT verification.
- *
- * The session cookie used to be decoded *without* checking its signature:
- * anyone could craft a cookie with an arbitrary `sub` and act as that user.
- * The verification is now the only thing standing between a browser cookie
- * and an account, so it is tested with real signatures.
- */
-
 const ISSUER = 'https://paymock-test.clerk.accounts.dev';
 
 function base64Url(input: string | Uint8Array): string {
@@ -65,7 +56,6 @@ async function runTests() {
   const jwks = [publicJwk as JsonWebKey & { kid: string }];
   const now = Math.floor(Date.now() / 1000);
 
-  // 1. A properly signed token is accepted.
   const valid = await signJwt(privateKey, 'test-key-1', {
     sub: 'user_2abcDEF',
     iss: ISSUER,
@@ -78,7 +68,6 @@ async function runTests() {
   assert.strictEqual(verified.userId, 'user_2abcDEF', 'the user id comes from the payload');
   assert.strictEqual(verified.sessionId, 'sess_1', 'the session id comes from the payload');
 
-  // 2. A token signed by another key is rejected.
   const other = await makeKeyPair();
   const foreign = await signJwt(other.privateKey, 'test-key-1', {
     sub: 'user_attacker',
@@ -92,7 +81,6 @@ async function runTests() {
     'a token signed with a foreign key is rejected'
   );
 
-  // 3. A payload that was tampered with after signing is rejected.
   const [header, , signature] = valid.split('.');
   const tamperedPayload = base64Url(
     JSON.stringify({ sub: 'user_admin', iss: ISSUER, exp: now + 600 })
@@ -103,7 +91,6 @@ async function runTests() {
     'a tampered payload is rejected'
   );
 
-  // 4. The `alg: none` trick does not work.
   const noneHeader = base64Url(JSON.stringify({ alg: 'none', typ: 'JWT' }));
   const nonePayload = base64Url(
     JSON.stringify({ sub: 'user_admin', iss: ISSUER, exp: now + 600 })
@@ -114,7 +101,6 @@ async function runTests() {
     'an unsigned token is rejected'
   );
 
-  // 5. An expired token is rejected.
   const expired = await signJwt(privateKey, 'test-key-1', {
     sub: 'user_2abcDEF',
     iss: ISSUER,
@@ -126,7 +112,6 @@ async function runTests() {
     'an expired token is rejected'
   );
 
-  // 6. A token from another issuer is rejected.
   const otherIssuer = await signJwt(privateKey, 'test-key-1', {
     sub: 'user_2abcDEF',
     iss: 'https://evil.example',
@@ -138,7 +123,6 @@ async function runTests() {
     'a token from another issuer is rejected'
   );
 
-  // 7. A token without a subject is rejected.
   const noSubject = await signJwt(privateKey, 'test-key-1', {
     iss: ISSUER,
     exp: now + 600,
@@ -149,7 +133,6 @@ async function runTests() {
     'a token without a subject is rejected'
   );
 
-  // 8. Garbage is rejected without throwing.
   assert.strictEqual(await verifyRs256Jwt('not-a-jwt', jwks, ISSUER, now), null);
   assert.strictEqual(await verifyRs256Jwt('a.b.c', jwks, ISSUER, now), null);
 

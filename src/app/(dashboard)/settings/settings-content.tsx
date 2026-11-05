@@ -32,7 +32,6 @@ function SettingsContent() {
   const [isDeleting, setIsDeleting] = React.useState(false);
   const [resetSuccessMessage, setResetSuccessMessage] = React.useState<string | null>(null);
 
-  // Rename project state
   const [isEditingName, setIsEditingName] = React.useState(false);
   const [nameInput, setNameInput] = React.useState('');
   const [isSavingName, setIsSavingName] = React.useState(false);
@@ -108,7 +107,6 @@ function SettingsContent() {
         </div>
       )}
 
-      {/* Project General Info */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm">Загальна інформація</CardTitle>
@@ -208,7 +206,6 @@ function SettingsContent() {
         </CardContent>
       </Card>
 
-      {/* API Key & Token Management */}
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
@@ -225,7 +222,6 @@ function SettingsContent() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Base API URL */}
           <div className="rounded-lg border border-input bg-secondary/50 p-3.5">
             <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground block mb-1">
               Base API URL
@@ -244,11 +240,6 @@ function SettingsContent() {
             </div>
           </div>
 
-          {/*
-            The token is stored as a SHA-256 hash, so it cannot be displayed a
-            second time. It is shown exactly once — right after the project
-            was created or the token was rotated.
-          */}
           {issuedCredentials && issuedCredentials.projectId === selectedProject.id && issuedCredentials.token ? (
             <div className="space-y-2">
               <SecretField
@@ -293,7 +284,6 @@ function SettingsContent() {
         </CardContent>
       </Card>
 
-      {/* Danger Zone */}
       <Card className="border-destructive/30">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm text-destructive flex items-center gap-2">
@@ -317,7 +307,6 @@ function SettingsContent() {
         </CardFooter>
       </Card>
 
-      {/* Confirm Reset Token Dialog */}
       <ConfirmActionDialog
         open={isResetDialogOpen}
         onOpenChange={setIsResetDialogOpen}
@@ -339,7 +328,6 @@ function SettingsContent() {
         }
       />
 
-      {/* Confirm Delete Project Dialog */}
       <ConfirmActionDialog
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}

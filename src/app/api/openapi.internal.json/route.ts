@@ -1,22 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/server/auth/session';
 
-/**
- * The internal OpenAPI document.
- *
- * It describes the account-scoped surface — projects, personal access tokens
- * and the MCP server — which is *not* part of the public contract. The
- * document is therefore guarded: without a valid session the response is a
- * plain 401 and no part of the internal API is disclosed.
- *
- * The check is delegated to `authenticateRequest`, the single place where
- * the accepted credentials are defined: an account token (`pmk_usr_…`), a
- * Clerk session (JWT in `Authorization: Bearer` or in the `__session` cookie)
- * or — outside production only — the `x-user-id` development header.
- * The signature of the session token is verified against the instance JWKS
- * there; nothing is re-implemented here.
- */
-
 type JsonSchema = Record<string, unknown>;
 
 type SecurityScheme =
@@ -82,14 +66,10 @@ interface OpenApiDocument {
 
 const NO_STORE = { 'Cache-Control': 'private, no-store' } as const;
 
-/** Account token (`pmk_usr_…`) or project token (`pmk_live_…`). */
 const ACCOUNT_TOKEN_SECURITY: SecurityRequirement = { XToken: [] };
-/** Clerk session in the `__session` cookie. */
 const SESSION_COOKIE_SECURITY: SecurityRequirement = { SessionCookie: [] };
-/** Clerk session JWT in the `Authorization` header. */
 const SESSION_BEARER_SECURITY: SecurityRequirement = { SessionBearer: [] };
 
-/** Any of the accepted account credentials. */
 const ACCOUNT_SECURITY: SecurityRequirement[] = [
   ACCOUNT_TOKEN_SECURITY,
   SESSION_COOKIE_SECURITY,
@@ -99,7 +79,6 @@ const ACCOUNT_SECURITY: SecurityRequirement[] = [
 export async function GET(req: NextRequest) {
   const actor = await authenticateRequest(req);
 
-  // No valid credential — the internal contract is not disclosed at all.
   if (!actor) {
     return NextResponse.json(
       { error: 'Unauthorized' },

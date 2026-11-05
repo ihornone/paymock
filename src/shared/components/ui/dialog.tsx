@@ -33,14 +33,12 @@ export function Dialog({ open, onOpenChange, children }: DialogProps) {
 
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 overflow-y-auto animate-in fade-in-0 duration-200">
-      {/* Full-screen backdrop blur and dim */}
       <div
         className="fixed inset-0 bg-black/70 backdrop-blur-md transition-opacity"
         onClick={() => onOpenChange(false)}
         aria-hidden="true"
       />
 
-      {/* Dialog modal box */}
       <div className="relative z-[101] w-full max-w-lg rounded-xl border border-border bg-card p-6 shadow-2xl animate-in zoom-in-95 duration-200 sm:rounded-xl">
         <DialogClose onClose={() => onOpenChange(false)} />
         {children}

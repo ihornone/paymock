@@ -48,14 +48,12 @@ export function ChartAreaInteractiveImpl() {
   const isMobile = useIsMobile();
   const [timeRange, setTimeRange] = React.useState<'7d' | '30d' | '90d'>('30d');
 
-  // Compute aggregated daily chart data based on invoices
   const chartData = React.useMemo(() => {
     const days = timeRange === '7d' ? 7 : timeRange === '90d' ? 90 : 30;
     const now = new Date();
-    
-    // Generate dates map for the period
+
     const dateMap = new Map<string, { date: string; turnover: number; invoices: number }>();
-    
+
     for (let i = days - 1; i >= 0; i--) {
       const d = new Date(now);
       d.setDate(d.getDate() - i);
@@ -63,7 +61,6 @@ export function ChartAreaInteractiveImpl() {
       dateMap.set(key, { date: key, turnover: 0, invoices: 0 });
     }
 
-    // Populate with real invoice data
     invoices.forEach((inv) => {
       const dateKey = inv.created_date ? inv.created_date.slice(0, 10) : '';
       if (dateMap.has(dateKey)) {

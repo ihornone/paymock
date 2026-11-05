@@ -12,7 +12,6 @@ export function DocContentViewer({ htmlContent }: DocContentViewerProps) {
   React.useEffect(() => {
     if (!containerRef.current) return;
 
-    // 1. Enhance and restyle all <details> accordion elements
     const detailElements = containerRef.current.querySelectorAll('details');
     detailElements.forEach((detail) => {
       if (detail.dataset.enhanced === 'true') return;
@@ -26,7 +25,6 @@ export function DocContentViewer({ htmlContent }: DocContentViewerProps) {
         summary.className =
           'flex items-center justify-between gap-3 px-4 py-3 sm:px-5 sm:py-3.5 cursor-pointer select-none transition-colors hover:bg-muted/30 focus-visible:outline-none list-none';
 
-        // Extract error code badge and message text
         const codeSpan = summary.querySelector('span');
         const codeText = codeSpan?.textContent?.trim() || '';
 
@@ -38,10 +36,8 @@ export function DocContentViewer({ htmlContent }: DocContentViewerProps) {
           messageText = summary.textContent?.trim() || '';
         }
 
-        // Clean up summary HTML
         summary.innerHTML = '';
 
-        // Left container: Badge + Error Title
         const leftBox = document.createElement('div');
         leftBox.className = 'flex items-center gap-2.5 sm:gap-3 flex-wrap min-w-0';
 
@@ -62,7 +58,6 @@ export function DocContentViewer({ htmlContent }: DocContentViewerProps) {
 
         summary.appendChild(leftBox);
 
-        // Right container: SVG ChevronDown Icon
         const chevronWrapper = document.createElement('div');
         chevronWrapper.className =
           'text-muted-foreground transition-transform duration-200 shrink-0 ml-2 group-open:rotate-180';
@@ -74,12 +69,10 @@ export function DocContentViewer({ htmlContent }: DocContentViewerProps) {
         summary.appendChild(chevronWrapper);
       }
 
-      // Wrap details inner body in styled container
       const bodyWrapper = document.createElement('div');
       bodyWrapper.className =
         'details-body border-t border-border/60 bg-muted/15 p-4 sm:p-5 space-y-3 text-xs sm:text-sm text-muted-foreground leading-relaxed';
 
-      // Move all non-summary children into bodyWrapper
       const childNodes = Array.from(detail.childNodes);
       childNodes.forEach((child) => {
         if (child !== summary) {
@@ -89,17 +82,14 @@ export function DocContentViewer({ htmlContent }: DocContentViewerProps) {
       detail.appendChild(bodyWrapper);
     });
 
-    // 2. Find all <pre> elements in markdown content
     const preElements = containerRef.current.querySelectorAll('pre');
 
     preElements.forEach((pre) => {
-      // Avoid duplicate wrappers if re-rendered
       if (pre.parentElement?.classList.contains('code-block-wrapper')) return;
 
       const codeElement = pre.querySelector('code');
       const textToCopy = codeElement ? codeElement.innerText : pre.innerText;
 
-      // Extract language if specified in class (e.g. language-http -> HTTP)
       let langName = '';
       if (codeElement) {
         const langClass = Array.from(codeElement.classList).find((c) => c.startsWith('language-'));
@@ -108,16 +98,13 @@ export function DocContentViewer({ htmlContent }: DocContentViewerProps) {
         }
       }
 
-      // Check if inside details for tighter styling
       const isInsideDetails = pre.closest('.details-body') !== null;
 
-      // Create outer wrapper
       const wrapper = document.createElement('div');
       wrapper.className = isInsideDetails
         ? 'code-block-wrapper relative my-3 rounded-xl border border-border/80 bg-zinc-950 overflow-hidden shadow-xs'
         : 'code-block-wrapper relative my-5 rounded-xl border border-border bg-zinc-950 overflow-hidden shadow-sm';
 
-      // Create header bar
       const headerBar = document.createElement('div');
       headerBar.className =
         'flex items-center justify-between px-4 py-2 border-b border-border/60 bg-zinc-900/60 text-xs text-muted-foreground select-none';
@@ -127,7 +114,6 @@ export function DocContentViewer({ htmlContent }: DocContentViewerProps) {
       langSpan.textContent = langName || 'CODE';
       headerBar.appendChild(langSpan);
 
-      // Create native interactive copy button (no React createRoot memory leak)
       const copyButton = document.createElement('button');
       copyButton.type = 'button';
       copyButton.className =
@@ -172,7 +158,6 @@ export function DocContentViewer({ htmlContent }: DocContentViewerProps) {
 
       headerBar.appendChild(copyButton);
 
-      // Restyle pre element
       pre.className = isInsideDetails
         ? 'm-0 p-3.5 sm:p-4 overflow-x-auto text-[12px] sm:text-[13px] leading-relaxed font-mono text-zinc-100 bg-transparent'
         : 'm-0 p-4 sm:p-5 overflow-x-auto text-[12px] sm:text-[13px] leading-relaxed font-mono text-zinc-100 bg-transparent';
@@ -181,7 +166,6 @@ export function DocContentViewer({ htmlContent }: DocContentViewerProps) {
         codeElement.className = 'font-mono block leading-relaxed';
       }
 
-      // Replace pre with wrapper containing header and pre
       pre.parentNode?.insertBefore(wrapper, pre);
       wrapper.appendChild(headerBar);
       wrapper.appendChild(pre);

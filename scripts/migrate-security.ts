@@ -1,27 +1,3 @@
-/**
- * Security migration for the production D1 database.
- *
- * What it does:
- *  1. takes a full backup of every table;
- *  2. removes owner-less projects (orphans — their tokens used to work and
- *     they could not be listed by anybody);
- *  3. adds `token_hash` and `webhook_secret` to `projects`;
- *  4. **rotates every merchant token** — the plaintext tokens lived in the
- *     database in the clear, so they are treated as compromised;
- *  5. rebuilds `projects`, `invoices` and `webhook_logs` with the new schema
- *     (`user_id NOT NULL`, no plaintext `token` column) while preserving every
- *     row and every foreign key;
- *  6. creates the `audit_log` table;
- *  7. writes the new tokens to a file that is printed exactly once.
- *
- * Usage:
- *   CLOUDFLARE_DATABASE_ID=<id> tsx scripts/migrate-security.ts
- *
- * Flags:
- *   --keep-orphans   do not delete rows with `user_id IS NULL`
- *   --dry-run        print the plan without touching the database
- */
-
 import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -85,18 +61,6 @@ async function backup(tables: string[]): Promise<string> {
   return path;
 }
 
-/**
- * The rebuild.
- *
- * SQLite cannot drop a column that carries a UNIQUE constraint and cannot
- * add a NOT NULL constraint to an existing column, so the three tables are
- * recreated. The new tables are filled first, then the old ones are dropped
- * (in dependency order, so the cascade deletes nothing that still exists)
- * and finally the new ones take their place.
- *
- * The order matters: dropping the old `projects` before the old `invoices`
- * would cascade-delete every invoice.
- */
 const REBUILD_SQL = `
 CREATE TABLE projects_new (
   id TEXT PRIMARY KEY,
@@ -253,11 +217,9 @@ async function main(): Promise<void> {
     return;
   }
 
-  // 1. Backup first — always.
   const backupPath = await backup(tables);
   console.log(`→ backup written: ${backupPath}`);
 
-  // 2. Orphans.
   if (orphans.length > 0 && !keepOrphans) {
     const ids = orphans.map((p) => p.id);
     const { changes } = await d1Query(
@@ -271,7 +233,6 @@ async function main(): Promise<void> {
     console.log('→ orphans kept (--keep-orphans)');
   }
 
-  // 3. New columns.
   const columnsAfterCleanup = await listColumns('projects');
   if (!columnsAfterCleanup.includes('token_hash')) {
     await d1Query('ALTER TABLE projects ADD COLUMN token_hash TEXT');
@@ -282,8 +243,6 @@ async function main(): Promise<void> {
     console.log('→ added projects.webhook_secret');
   }
 
-  // 4. Rotate every token. The plaintext tokens were readable in the
-  //    database, so every one of them is considered compromised.
   const issued: Array<{ id: string; name: string; token: string; webhookSecret: string }> = [];
 
   const { results: liveRows } = await d1Query(
@@ -303,15 +262,12 @@ async function main(): Promise<void> {
     issued.push({ id: row.id, name: row.name, token, webhookSecret });
   }
 
-  // 5. Rebuild the tables with the new schema.
   await d1Query(REBUILD_SQL);
   console.log('→ projects / invoices / webhook_logs rebuilt with the new schema');
 
-  // 6. Audit log.
   await d1Query(AUDIT_LOG_SQL);
   console.log('→ audit_log created');
 
-  // 7. The new tokens, exactly once.
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const issuedPath = join(BACKUP_DIR, `issued-tokens-${stamp}.json`);
   writeFileSync(

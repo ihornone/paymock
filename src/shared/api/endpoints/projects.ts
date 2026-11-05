@@ -1,9 +1,6 @@
 import { apiRequest, type ApiRequestOptions } from '@/shared/api/client';
 import type { Project, InvoiceRecord, InvoiceStats, WebhookLogRecord } from '@/shared/types/models';
 
-/**
- * Response of `GET /api/admin/projects` — the dashboard bootstrap payload.
- */
 export interface DashboardData {
   projects: Project[];
   currentProjectId: string | null;
@@ -20,21 +17,11 @@ export interface CreateProjectInput {
 export interface CreatedProject {
   ok: boolean;
   project: Project;
-  /**
-   * The merchant token and the webhook signing secret.
-   *
-   * They are returned exactly once — only their hashes are stored, so a lost
-   * token must be rotated rather than looked up.
-   */
   token: string;
   webhookSecret: string;
 }
 
-/**
- * Typed endpoint definitions for the dashboard / project management API.
- */
 export const projectsApi = {
-  /** Loads projects, the selected project's invoices, webhooks and stats. */
   getDashboard: (projectId?: string, options?: ApiRequestOptions) =>
     apiRequest<DashboardData>(
       projectId
@@ -83,11 +70,6 @@ export const projectsApi = {
       }
     ),
 
-  /**
-   * Change probe for the live dashboard. The revision changes whenever a
-   * payment, cancellation or webhook delivery touches the project, so the
-   * dashboard refetches itself only when this value moves.
-   */
   getRevision: (projectId?: string, options?: ApiRequestOptions) =>
     apiRequest<{ revision: string; currentProjectId: string | null }>(
       projectId

@@ -25,10 +25,6 @@ export { MCP_TOOLS } from './schemas';
 export interface ExecuteMcpToolOptions {
   toolName: string;
   args: any;
-  /**
-   * Authorization scope of the session. Exactly one of `userId` / `projectId`
-   * is set — see `McpScope`.
-   */
   scope: McpScope;
   origin?: string;
   projectsRepo?: ProjectsRepository;
@@ -36,9 +32,6 @@ export interface ExecuteMcpToolOptions {
   webhooksRepo?: WebhooksRepository;
 }
 
-/**
- * Clean, modular dispatcher for MCP tool executions.
- */
 export async function executeMcpTool({
   toolName,
   args = {},
@@ -53,7 +46,6 @@ export async function executeMcpTool({
   const webhookCtx = { scope, projectsRepo, invoicesRepo, webhooksRepo };
 
   switch (toolName) {
-    // 1. Projects
     case 'list_projects':
       return handleListProjects(projectCtx);
     case 'create_project':
@@ -63,7 +55,6 @@ export async function executeMcpTool({
     case 'reset_project_token':
       return handleResetProjectToken(args, projectCtx);
 
-    // 2. Invoices
     case 'create_invoice':
       return handleCreateInvoice(args, invoiceCtx);
     case 'get_invoice':
@@ -71,7 +62,6 @@ export async function executeMcpTool({
     case 'list_invoices':
       return handleListInvoices(args, invoiceCtx);
 
-    // 3. Webhooks & Testing
     case 'simulate_payment':
       return handleSimulatePayment(args, webhookCtx);
     case 'get_webhook_logs':

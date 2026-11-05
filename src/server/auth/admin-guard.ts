@@ -5,21 +5,6 @@ import { checkRateLimit, getClientIp, rateLimitResponse } from '@/server/rate-li
 import { recordAudit } from '@/server/db/audit.repository';
 import { logger } from '@/shared/logger';
 
-/**
- * The common gate in front of every account-scoped mutation.
- *
- * The order matters:
- *  1. **authentication** — no credential, no action (401);
- *  2. **CSRF** — a cookie-authenticated mutation must come from this origin
- *     (403). A token-authenticated request is not forgeable by a third-party
- *     site and is therefore not checked;
- *  3. **rate limit** — a session that suddenly creates dozens of projects is
- *     either broken or hostile (429).
- *
- * Every denial is written to the audit log — an anonymous attempt to create
- * a project is exactly the event an operator wants to see.
- */
-
 export const ADMIN_MUTATION_RATE_LIMIT = 30;
 export const ADMIN_READ_RATE_LIMIT = 60;
 export const ADMIN_MUTATION_WINDOW_MS = 60_000;
@@ -35,20 +20,14 @@ export type GuardResult =
   | { ok: false; context: null; error: NextResponse };
 
 export interface GuardOptions {
-  /** Audit action name, e.g. `project.create`. */
   action: string;
-  /** Targets the mutation is about (filled in by the caller). */
   targetType?: string;
   targetId?: string | null;
-  /** Rate-limit bucket suffix, so different routes do not share a counter. */
   rateLimitBucket?: string;
   limit?: number;
   windowMs?: number;
 }
 
-/**
- * Applies the gate to a mutating request.
- */
 export async function guardAdminMutation(
   req: NextRequest,
   options: GuardOptions
@@ -56,12 +35,6 @@ export async function guardAdminMutation(
   const ip = getClientIp(req);
   const userAgent = req.headers.get('user-agent');
 
-  // 1. Rate limit — *before* authentication.
-  //
-  // The limit is keyed by IP, not by user: an anonymous brute-force must be
-  // throttled too, and it is the IP that is the meaningful bucket at this
-  // point. Placing the check after authentication would let an attacker
-  // hammer the endpoint with 401s forever.
   const limit = checkRateLimit({
     key: `admin:${options.rateLimitBucket ?? options.action}:${ip}`,
     limit: options.limit ?? ADMIN_MUTATION_RATE_LIMIT,
@@ -88,7 +61,6 @@ export async function guardAdminMutation(
     };
   }
 
-  // 2. Authentication.
   const actor = await authenticateRequest(req);
 
   if (!actor) {
@@ -121,7 +93,6 @@ export async function guardAdminMutation(
     };
   }
 
-  // 3. CSRF — a cookie-authenticated mutation must come from this origin.
   if (actor.authenticatedByCookie) {
     const csrf = checkSameOrigin(req);
     if (!csrf.ok) {
@@ -148,13 +119,6 @@ export async function guardAdminMutation(
   };
 }
 
-/**
- * The read-side gate: authentication plus a read rate limit.
- *
- * Reads are not CSRF-sensitive, but they are still throttled: the dashboard
- * polls, and an unbounded read path is a cheap way to burn the account's
- * database quota.
- */
 export async function guardAdminRead(
   req: NextRequest,
   action: string

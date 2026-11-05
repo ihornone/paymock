@@ -7,29 +7,12 @@ import { DashboardProvider } from './dashboard-context';
 
 const CLERK_KEY_META = 'paymock-clerk-publishable-key';
 
-/**
- * Reads the Clerk publishable key from the document.
- *
- * The key is published by the root layout as a meta tag rather than being
- * inlined into the client bundle at build time: `NEXT_PUBLIC_*` variables are
- * substituted while building, but the key only exists in the Worker's runtime
- * variables.
- */
 function readClerkPublishableKey(): string {
   if (typeof document === 'undefined') return '';
   const meta = document.querySelector(`meta[name="${CLERK_KEY_META}"]`);
   return meta?.getAttribute('content')?.trim() ?? '';
 }
 
-/**
- * Dashboard runtime — Clerk provider + dashboard context.
- *
- * This module is loaded exclusively on the client, which keeps the Clerk SDK
- * — 915 KB of the Worker bundle — out of the server bundle entirely. The
- * dashboard is an authenticated application behind a login: it fetches all of
- * its data from the browser anyway, so server-rendering it bought nothing
- * while making every cold start of every API request pay for the Clerk SDK.
- */
 export function DashboardRuntime({ children }: { children: React.ReactNode }) {
   return (
     <ClerkProvider

@@ -1,11 +1,3 @@
--- Paymock Cloudflare D1 Database Schema
---
--- Секрети ніколи не зберігаються у відкритому вигляді:
---   * `projects.token_hash`  — SHA-256 від X-Token мерчанта;
---   * `projects.webhook_secret` — ключ HMAC для підпису вебхуків.
--- Токен показується користувачу рівно один раз — при створенні або ротації.
-
--- 1. Таблиця проєктів (Мерчантів)
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
@@ -21,7 +13,6 @@ CREATE TABLE IF NOT EXISTS projects (
   updated_at TEXT NOT NULL
 );
 
--- 2. Таблиця рахунків (Інвойсів)
 CREATE TABLE IF NOT EXISTS invoices (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -47,7 +38,6 @@ CREATE TABLE IF NOT EXISTS invoices (
   modified_date TEXT NOT NULL
 );
 
--- 3. Таблиця логів відправки Webhook
 CREATE TABLE IF NOT EXISTS webhook_logs (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -61,9 +51,6 @@ CREATE TABLE IF NOT EXISTS webhook_logs (
   created_at TEXT NOT NULL
 );
 
--- 4. Персональні токени доступу (Personal Access Tokens).
--- MCP-сервер та акаунтні API автентифікуються цим токеном.
--- Зберігається лише SHA-256 хеш — значення токена не відновити зі сховища.
 CREATE TABLE IF NOT EXISTS personal_access_tokens (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
@@ -74,7 +61,6 @@ CREATE TABLE IF NOT EXISTS personal_access_tokens (
   revoked_at TEXT
 );
 
--- 5. Журнал аудиту мутацій: хто, звідки, що зробив і з яким результатом.
 CREATE TABLE IF NOT EXISTS audit_log (
   id TEXT PRIMARY KEY,
   created_at TEXT NOT NULL,
@@ -89,7 +75,6 @@ CREATE TABLE IF NOT EXISTS audit_log (
   detail TEXT
 );
 
--- Індекси
 CREATE INDEX IF NOT EXISTS idx_projects_token_hash ON projects(token_hash);
 CREATE INDEX IF NOT EXISTS idx_projects_user_id ON projects(user_id);
 CREATE INDEX IF NOT EXISTS idx_invoices_project ON invoices(project_id);
@@ -102,13 +87,5 @@ CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
 CREATE INDEX IF NOT EXISTS idx_audit_log_actor ON audit_log(actor_user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action);
 
--- Складені індекси для гарячих запитів дашборду:
---   WHERE project_id = ? ORDER BY created_date DESC LIMIT n
--- Без них SQLite сортує всі рядки проєкту у тимчасовому B-Tree перед LIMIT
--- (виміряно: у 192 рази повільніше на 100 000 рахунках у проєкті).
 CREATE INDEX IF NOT EXISTS idx_invoices_project_created ON invoices(project_id, created_date);
 CREATE INDEX IF NOT EXISTS idx_webhook_logs_project_created ON webhook_logs(project_id, created_at);
-
--- Демо-проєкт НЕ сидиться тут: його токен генерується при бутстрапі
--- (scripts/seed-demo.ts) і зберігається лише у вигляді хешу.
--- Статичний токен у репозиторії однаково використовував би всі інстанси.

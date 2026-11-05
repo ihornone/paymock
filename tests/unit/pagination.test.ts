@@ -8,17 +8,9 @@ import {
   MAX_PROJECTS_PER_USER,
 } from '../../src/shared/utils/pagination';
 
-/**
- * Regression tests for the pagination bounds.
- *
- * A negative `limit` is not a harmless value: Drizzle drops the `LIMIT` clause
- * entirely for negative inputs, which turns a bounded query into a full table
- * scan. `clampLimit` is the single guard against that.
- */
 function runTests() {
   console.log('🧪 Running pagination unit tests...');
 
-  // Arrange / Act / Assert
   assert.strictEqual(clampLimit(undefined), DEFAULT_PAGE_SIZE, 'undefined falls back to the default');
   assert.strictEqual(clampLimit(null), DEFAULT_PAGE_SIZE, 'null falls back to the default');
   assert.strictEqual(clampLimit('not-a-number'), DEFAULT_PAGE_SIZE, 'NaN falls back to the default');

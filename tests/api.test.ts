@@ -2,31 +2,11 @@ import assert from 'node:assert';
 
 const BASE_URL = process.env.PAYMOCK_URL || 'http://127.0.0.1:8787';
 
-/**
- * The merchant token of the demo project.
- *
- * It is generated per installation (`pnpm db:seed:demo`) and never stored in
- * plaintext, so it must be passed in through the environment.
- */
 const DEMO_TOKEN = process.env.PAYMOCK_DEMO_TOKEN || '';
 const DEMO_USER_ID = process.env.PAYMOCK_USER_ID || 'demo_user';
 
-/**
- * Account-scoped personal access token.
- *
- * The MCP server is documented to be used with the global account token
- * (`pmk_usr_…`). Provide it via the environment for E2E runs against a
- * deployed environment; without it the suite falls back to the project token,
- * which yields a project-scoped session.
- */
 const ACCOUNT_TOKEN = process.env.PAYMOCK_ACCOUNT_TOKEN || '';
 
-/**
- * The credential of the account-scoped API.
- *
- * Outside production the development header stands in for a session; in
- * production only a personal access token is accepted.
- */
 function accountAuthHeaders(): Record<string, string> {
   if (ACCOUNT_TOKEN) return { 'X-Token': ACCOUNT_TOKEN };
   return { 'x-user-id': DEMO_USER_ID };
@@ -35,7 +15,6 @@ function accountAuthHeaders(): Record<string, string> {
 async function runTests() {
   console.log(`🚀 Starting Paymock E2E Verification Tests against ${BASE_URL}...`);
 
-  // 1. Auth & Details Test
   console.log('\n[Test 1] Testing /api/merchant/details authorization...');
   const resNoAuth = await fetch(`${BASE_URL}/api/merchant/details`);
   assert.strictEqual(resNoAuth.status, 403, 'Should return 403 when X-Token is missing');
@@ -51,7 +30,6 @@ async function runTests() {
   assert.strictEqual(details.merchantName, 'Демо Магазин (Paymock)');
   console.log('✅ Auth and details verified successfully.');
 
-  // 2. Invoice Creation Test
   console.log('\n[Test 2] Testing /api/merchant/invoice/create...');
   const resCreate = await fetch(`${BASE_URL}/api/merchant/invoice/create`, {
     method: 'POST',
@@ -78,7 +56,6 @@ async function runTests() {
   assert.ok(createdInvoice.appUrl.includes('paymock://'), 'appUrl should contain paymock scheme');
   console.log(`✅ Invoice ${createdInvoice.invoiceId} created successfully.`);
 
-  // 3. Status Verification (Initial 'created')
   console.log('\n[Test 3] Testing /api/merchant/invoice/status (initial)...');
   const resStatusInitial = await fetch(
     `${BASE_URL}/api/merchant/invoice/status?invoiceId=${createdInvoice.invoiceId}`,
@@ -90,7 +67,6 @@ async function runTests() {
   assert.strictEqual(statusInitial.amount, 4200);
   console.log('✅ Initial invoice status is "created".');
 
-  // 4. Simulate Payment Success via Checkout API
   console.log('\n[Test 4] Simulating payment success...');
   const resSimulate = await fetch(`${BASE_URL}/pay/${createdInvoice.invoiceId}/action`, {
     method: 'POST',
@@ -102,7 +78,6 @@ async function runTests() {
   assert.strictEqual(simulateData.ok, true);
   assert.strictEqual(simulateData.status, 'success');
 
-  // 5. Status Verification (After payment 'success')
   console.log('\n[Test 5] Testing /api/merchant/invoice/status (paid)...');
   const resStatusPaid = await fetch(
     `${BASE_URL}/api/merchant/invoice/status?invoiceId=${createdInvoice.invoiceId}`,
@@ -118,7 +93,6 @@ async function runTests() {
   assert.strictEqual(statusPaid.paymentInfo.paymentSystem, 'Visa');
   console.log('✅ Paid invoice status is "success" with simulated card details.');
 
-  // 6. Cancel / Refund Test
   console.log('\n[Test 6] Testing /api/merchant/invoice/cancel...');
   const resCancel = await fetch(`${BASE_URL}/api/merchant/invoice/cancel`, {
     method: 'POST',
@@ -135,7 +109,6 @@ async function runTests() {
   const cancelData = await resCancel.json() as { status: string };
   assert.strictEqual(cancelData.status, 'success');
 
-  // Status after cancel should be 'reversed'
   const resStatusReversed = await fetch(
     `${BASE_URL}/api/merchant/invoice/status?invoiceId=${createdInvoice.invoiceId}`,
     { headers: { 'X-Token': DEMO_TOKEN } }
@@ -145,7 +118,6 @@ async function runTests() {
   assert.strictEqual(statusReversed.finalAmount, 0);
   console.log('✅ Invoice successfully cancelled and refunded (status "reversed").');
 
-  // 7. Multi-project Management Test
   console.log('\n[Test 7] Testing multi-project creation and tenant isolation...');
   const resNewProject = await fetch(`${BASE_URL}/api/admin/projects`, {
     method: 'POST',
@@ -155,18 +127,15 @@ async function runTests() {
       edrpou: '11223344',
     }),
   });
-  // 201 Created — the project (and its one-time token) are returned.
   assert.strictEqual(resNewProject.status, 201);
   const newProjectData = await resNewProject.json() as {
     ok: boolean;
     project: { id: string; name: string };
-    // The token is returned exactly once — at creation.
     token: string;
   };
   assert.strictEqual(newProjectData.ok, true);
   assert.ok(newProjectData.token.startsWith('pmk_live_'));
 
-  // Test details with new project token
   const resCustomDetails = await fetch(`${BASE_URL}/api/merchant/details`, {
     headers: { 'X-Token': newProjectData.token },
   });
@@ -175,14 +144,10 @@ async function runTests() {
   assert.strictEqual(customDetails.merchantName, 'E2E Тестовий Магазин');
   console.log('✅ Multi-project isolation and custom tokens verified.');
 
-  // [Test 8] Global MCP Server (Account-Scoped Tools)
   console.log('\n[Test 8] Testing Global MCP Server (create_project, list_projects, create_invoice)...');
-  
-  // The MCP session token. An account token gives an account-wide session;
-  // a project token gives a project-scoped session.
+
   const mcpToken = ACCOUNT_TOKEN || newProjectData.token;
 
-  // 8.1 List MCP Tools
   const resMcpTools = await fetch(`${BASE_URL}/api/mcp`, {
     method: 'POST',
     headers: {
@@ -207,7 +172,6 @@ async function runTests() {
   assert.ok(toolNames.includes('reset_project_token'));
   assert.ok(toolNames.includes('create_invoice'));
 
-  // 8.2 Create a project via MCP AI Tool
   const resCreateProjectMcp = await fetch(`${BASE_URL}/api/mcp`, {
     method: 'POST',
     headers: {
@@ -235,8 +199,6 @@ async function runTests() {
   };
 
   if (!ACCOUNT_TOKEN) {
-    // A project-scoped session must not be able to create new projects —
-    // that would let any merchant token mint projects of the account.
     assert.ok(
       createProjectPayload.error,
       'a project-scoped MCP session cannot create a project'
@@ -259,7 +221,6 @@ async function runTests() {
     ? (JSON.parse((createProjectPayload as { result: { content: Array<{ text: string }> } }).result.content[0].text) as { project: { id: string } }).project.id
     : newProjectData.project.id;
 
-  // 8.3 Create Invoice in the newly created project via MCP
   const resCreateInvoiceMcp = await fetch(`${BASE_URL}/api/mcp`, {
     method: 'POST',
     headers: {
@@ -289,7 +250,6 @@ async function runTests() {
   assert.strictEqual(createdInvoiceParsed.amount, 5500);
   assert.ok(createdInvoiceParsed.pageUrl.includes(createdInvoiceParsed.invoiceId));
 
-  // 8.4 Simulate payment via MCP
   const resSimulateMcp = await fetch(`${BASE_URL}/api/mcp`, {
     method: 'POST',
     headers: {
@@ -315,7 +275,6 @@ async function runTests() {
   };
   assert.ok(simulateMcpResult.result.content[0].text.includes('[success]'));
 
-  // 8.5 Reset Project Token via MCP
   const resResetTokenMcp = await fetch(`${BASE_URL}/api/mcp`, {
     method: 'POST',
     headers: {
@@ -343,13 +302,8 @@ async function runTests() {
     'the rotated token differs from the previous one'
   );
 
-  // The rotated token replaces the previous one: every later MCP call
-  // must use it, the old token is dead by design.
   const mcpLiveToken = ACCOUNT_TOKEN || resetTokenParsed.newToken;
 
-  // 8.5b An oversized basket must be rejected by server-side validation.
-  // The merchant API authenticates with a *project* token — the one issued by
-  // the rotation above: the previous token is dead by design.
   const resOversizedBasket = await fetch(`${BASE_URL}/api/merchant/invoice/create`, {
     method: 'POST',
     headers: {
@@ -372,7 +326,6 @@ async function runTests() {
   );
   console.log('✅ Oversized basket rejected by server-side validation.');
 
-  // 8.6 Test server/discover probe (Modern MCP protocol 2026-07-28)
   const resDiscover = await fetch(`${BASE_URL}/api/mcp`, {
     method: 'POST',
     headers: {
@@ -394,7 +347,6 @@ async function runTests() {
   assert.ok(discoverData.result.capabilities.tools);
   console.log('✅ MCP server/discover probe verified successfully.');
 
-  // 8.7 Test MCP initialize handshake
   const resInit = await fetch(`${BASE_URL}/api/mcp`, {
     method: 'POST',
     headers: {
@@ -417,7 +369,6 @@ async function runTests() {
   assert.strictEqual(initData.result.protocolVersion, '2024-11-05');
   console.log('✅ MCP initialize handshake verified successfully.');
 
-  // 8.8 Test notifications/initialized notification (must return 204/200 without error)
   const resNotification = await fetch(`${BASE_URL}/api/mcp`, {
     method: 'POST',
     headers: {
@@ -436,7 +387,6 @@ async function runTests() {
   );
   console.log('✅ MCP notifications/initialized acknowledged successfully without 404.');
 
-  // 8.9 Test MCP ping
   const resPing = await fetch(`${BASE_URL}/api/mcp`, {
     method: 'POST',
     headers: {
@@ -454,7 +404,6 @@ async function runTests() {
   assert.deepStrictEqual(pingData.result, {});
   console.log('✅ MCP ping verified successfully.');
 
-  // 8.10 Test MCP resources/list and resources/read
   const resResourcesList = await fetch(`${BASE_URL}/api/mcp`, {
     method: 'POST',
     headers: {
@@ -490,7 +439,6 @@ async function runTests() {
   assert.ok(Array.isArray(resourceReadData.result.contents));
   console.log('✅ MCP resources/list and resources/read verified successfully.');
 
-  // 8.11 Test unknown method returns JSON-RPC error with HTTP 200 (not 404)
   const resUnknownMethod = await fetch(`${BASE_URL}/api/mcp`, {
     method: 'POST',
     headers: {
@@ -508,7 +456,6 @@ async function runTests() {
   assert.strictEqual(unknownMethodData.error.code, -32601);
   console.log('✅ Unknown JSON-RPC method cleanly handled with -32601 and HTTP 200.');
 
-  // 8.12 Test OPTIONS CORS preflight
   const resOptions = await fetch(`${BASE_URL}/api/mcp`, {
     method: 'OPTIONS',
   });
@@ -516,8 +463,6 @@ async function runTests() {
   assert.strictEqual(resOptions.headers.get('Access-Control-Allow-Origin'), '*');
   console.log('✅ MCP OPTIONS CORS preflight verified successfully.');
 
-  // 8.13 A negative `limit` must be clamped, not turned into an unbounded scan.
-  // A negative LIMIT makes Drizzle drop the LIMIT clause entirely.
   const resNegativeLimit = await fetch(`${BASE_URL}/api/mcp`, {
     method: 'POST',
     headers: {
@@ -541,7 +486,6 @@ async function runTests() {
   );
   console.log(`✅ Negative limit clamped to ${negativeLimitRows.length} rows (no unbounded scan).`);
 
-  // 8.14 An oversized `limit` must be capped as well.
   const resHugeLimit = await fetch(`${BASE_URL}/api/mcp`, {
     method: 'POST',
     headers: {
@@ -564,8 +508,6 @@ async function runTests() {
   );
   console.log(`✅ Oversized limit capped to ${hugeLimitRows.length} rows.`);
 
-  // 8.15 Protocol methods must work without touching the database, so they
-  // must succeed even without a token.
   const resPingNoAuth = await fetch(`${BASE_URL}/api/mcp`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -583,7 +525,6 @@ async function runTests() {
   assert.strictEqual(resDiscoverNoAuth.status, 200, 'server/discover must not require a token');
   console.log('✅ Protocol methods work without authentication (zero DB queries).');
 
-  // 8.16 A tool call without a token must still be rejected.
   const resToolNoAuth = await fetch(`${BASE_URL}/api/mcp`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -597,10 +538,6 @@ async function runTests() {
   assert.strictEqual(resToolNoAuth.status, 401, 'a tool call without a token must be rejected');
   console.log('✅ Tool calls without a token are rejected with 401.');
 
-  // 8.17 A forged personal access token must be rejected.
-  // `pmk_usr_<user id>` used to be accepted on the strength of its prefix,
-  // which let anyone impersonate an account. Only a stored, non-revoked
-  // token hash is accepted now.
   const resForgedToken = await fetch(`${BASE_URL}/api/mcp`, {
     method: 'POST',
     headers: {
@@ -621,9 +558,6 @@ async function runTests() {
   );
   console.log('✅ Forged personal access token rejected with 401.');
 
-  // 8.18 The same must hold for the account-wide admin API. That endpoint
-  // answers with an empty payload for an unauthenticated caller, so the
-  // guarantee to assert is that no account data leaks.
   const resForgedAdmin = await fetch(`${BASE_URL}/api/admin/projects`, {
     headers: { 'X-Token': `pmk_usr_${DEMO_USER_ID}` },
   });

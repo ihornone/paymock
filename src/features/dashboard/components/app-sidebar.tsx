@@ -125,7 +125,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   return (
     <Sidebar collapsible="icon" {...props}>
-      {/* 1. Header: Brand & Project Switcher */}
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
@@ -213,13 +212,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarHeader>
 
-      {/* 2. Content: NavMain and NavSecondary */}
       <SidebarContent>
         <NavMain items={navMain} />
         <NavSecondary items={navSecondary} className="mt-auto" />
       </SidebarContent>
 
-      {/* 3. Footer: NavUser */}
       <SidebarFooter>
         <NavUser user={userData} isAuthenticated={isUserAuthenticated} />
       </SidebarFooter>

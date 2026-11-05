@@ -1,12 +1,5 @@
 import type { ErrorResponse } from '../types/acquiring';
 
-/**
- * Base application error.
- *
- * Error classes are transport-agnostic: the HTTP status code is applied at the
- * boundary, not baked into the domain layer. The original error is preserved
- * through `cause` so stack traces survive abstraction layers.
- */
 export class AcquiringError extends Error {
   public readonly statusCode: number;
   public readonly errCode: string;

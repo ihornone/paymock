@@ -1,7 +1,3 @@
-/**
- * Deep verification of the MCP server and the merchant API.
- * Checks response bodies and semantics, not just status codes.
- */
 const B = process.env.PAYMOCK_URL || 'https://paymock.ihornone.site';
 const PROJECT_TOKEN = 'pmk_demo_test1234567890abcdef';
 const ACCOUNT_TOKEN = process.env.PAYMOCK_ACCOUNT_TOKEN || '';
@@ -32,7 +28,7 @@ async function rpc(body, token) {
   });
   const text = await res.text();
   let json = null;
-  try { json = JSON.parse(text); } catch { /* not json */ }
+  try { json = JSON.parse(text); } catch {  }
   return { status: res.status, headers: res.headers, json, text };
 }
 
@@ -47,7 +43,6 @@ async function callTool(name, args, token, id = 1) {
 
 console.log(`\n═══ MCP: протокол ═══`);
 
-// 1. server/discover
 {
   const r = await rpc({ jsonrpc: '2.0', id: 1, method: 'server/discover' }, ACCOUNT_TOKEN);
   check('server/discover → 200', r.status === 200, `got ${r.status}`);
@@ -56,7 +51,6 @@ console.log(`\n═══ MCP: протокол ═══`);
   check('server/discover → capabilities.tools', !!r.json?.result?.capabilities?.tools);
 }
 
-// 2. initialize
 {
   const r = await rpc({ jsonrpc: '2.0', id: 2, method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'verify', version: '1' } } }, ACCOUNT_TOKEN);
   check('initialize → 200', r.status === 200, `got ${r.status}`);
@@ -64,20 +58,17 @@ console.log(`\n═══ MCP: протокол ═══`);
   check('initialize → serverInfo', !!r.json?.result?.serverInfo?.name);
 }
 
-// 3. notifications/initialized
 {
   const r = await rpc({ jsonrpc: '2.0', method: 'notifications/initialized' }, ACCOUNT_TOKEN);
   check('notifications/initialized → 204 (без тіла)', r.status === 204, `got ${r.status}`);
   check('notifications/initialized → порожнє тіло', r.text.length === 0);
 }
 
-// 4. ping
 {
   const r = await rpc({ jsonrpc: '2.0', id: 3, method: 'ping' }, ACCOUNT_TOKEN);
   check('ping → 200 + result {}', r.status === 200 && JSON.stringify(r.json?.result) === '{}');
 }
 
-// 5. tools/list
 const EXPECTED_TOOLS = ['list_projects', 'create_project', 'get_project', 'reset_project_token', 'create_invoice', 'get_invoice', 'list_invoices', 'simulate_payment', 'get_webhook_logs', 'retry_webhook'];
 {
   const r = await rpc({ jsonrpc: '2.0', id: 4, method: 'tools/list' }, ACCOUNT_TOKEN);
@@ -93,7 +84,6 @@ const EXPECTED_TOOLS = ['list_projects', 'create_project', 'get_project', 'reset
 
 console.log(`\n═══ MCP: інструменти (акаунтний токен) ═══`);
 
-// list_projects
 let createdProjectId = null;
 {
   const r = await callTool('list_projects', {}, ACCOUNT_TOKEN);
@@ -102,7 +92,6 @@ let createdProjectId = null;
   check('list_projects → масив', Array.isArray(data), typeof data);
 }
 
-// create_project
 {
   const r = await callTool('create_project', { name: 'Verify Bot ' + Date.now() }, ACCOUNT_TOKEN);
   const data = toolText(r.json);
@@ -112,7 +101,6 @@ let createdProjectId = null;
   createdProjectId = data?.project?.id || null;
 }
 
-// get_project
 {
   const r = await callTool('get_project', { projectId: createdProjectId }, ACCOUNT_TOKEN);
   const data = toolText(r.json);
@@ -120,7 +108,6 @@ let createdProjectId = null;
   check('get_project → правильний id', data?.id === createdProjectId, `got ${data?.id}`);
 }
 
-// create_invoice
 let invoiceId = null;
 {
   const r = await callTool('create_invoice', { projectId: createdProjectId, amount: 4321, destination: 'Verify MCP' }, ACCOUNT_TOKEN);
@@ -133,7 +120,6 @@ let invoiceId = null;
   invoiceId = data?.invoiceId || null;
 }
 
-// get_invoice
 {
   const r = await callTool('get_invoice', { invoiceId }, ACCOUNT_TOKEN);
   const data = toolText(r.json);
@@ -141,7 +127,6 @@ let invoiceId = null;
   check('get_invoice → destination', data?.destination === 'Verify MCP', `got ${data?.destination}`);
 }
 
-// list_invoices
 {
   const r = await callTool('list_invoices', { projectId: createdProjectId, limit: 5 }, ACCOUNT_TOKEN);
   const data = toolText(r.json);
@@ -150,7 +135,6 @@ let invoiceId = null;
   check('list_invoices → не більше limit', Array.isArray(data) && data.length <= 5, `len=${data?.length}`);
 }
 
-// simulate_payment
 {
   const r = await callTool('simulate_payment', { invoiceId, action: 'success' }, ACCOUNT_TOKEN);
   const data = toolText(r.json);
@@ -158,7 +142,6 @@ let invoiceId = null;
   check('simulate_payment → статус success у тексті', String(data || '').includes('success'), String(data).slice(0, 80));
 }
 
-// get_webhook_logs
 {
   const r = await callTool('get_webhook_logs', { projectId: createdProjectId, limit: 5 }, ACCOUNT_TOKEN);
   const data = toolText(r.json);
@@ -166,13 +149,11 @@ let invoiceId = null;
   check('get_webhook_logs → масив', Array.isArray(data));
 }
 
-// retry_webhook: без webhook_url помилка — це правильна поведінка
 {
   const r = await callTool('retry_webhook', { invoiceId }, ACCOUNT_TOKEN);
   check('retry_webhook без webhook_url → помилка', !!r.json?.error, `got ${r.status}`);
   check('retry_webhook → пояснює причину', String(r.json?.error?.message || '').includes('webhook_url'), r.json?.error?.message);
 }
-// retry_webhook з явним webhook_url — має відпрацювати
 {
   const r = await callTool('retry_webhook', { invoiceId, customUrl: 'https://example.com/hook' }, ACCOUNT_TOKEN);
   const data = toolText(r.json);
@@ -180,7 +161,6 @@ let invoiceId = null;
   check('retry_webhook → містить HTTP Status', String(data || '').includes('HTTP Status'), String(data).slice(0, 80));
 }
 
-// reset_project_token
 {
   const before = toolText((await callTool('get_project', { projectId: createdProjectId }, ACCOUNT_TOKEN)).json);
   const r = await callTool('reset_project_token', { projectId: createdProjectId }, ACCOUNT_TOKEN);
@@ -192,20 +172,17 @@ let invoiceId = null;
 
 console.log(`\n═══ MCP: ізоляція scope ═══`);
 
-// project token не може створювати проєкти
 {
   const r = await callTool('create_project', { name: 'Should Fail' }, PROJECT_TOKEN);
   check('project-токен: create_project заблоковано', !!r.json?.error, `got ${r.status} ${r.text.slice(0, 90)}`);
   check('project-токен: повідомлення пояснює причину', String(r.json?.error?.message || '').includes('проєкт'), r.json?.error?.message);
 }
 
-// project token не може читати чужий проєкт
 {
   const r = await callTool('get_invoice', { invoiceId }, PROJECT_TOKEN);
   check('project-токен: чужий рахунок недоступний', !!r.json?.error, `got ${r.status} ${r.text.slice(0, 90)}`);
 }
 
-// project token бачить тільки свій проєкт
 {
   const r = await callTool('list_projects', {}, PROJECT_TOKEN);
   const data = toolText(r.json);
@@ -213,13 +190,11 @@ console.log(`\n═══ MCP: ізоляція scope ═══`);
   check('project-токен: id свого проєкту', data?.[0]?.id === 'pm_demo_store', data?.[0]?.id);
 }
 
-// підроблений токен
 {
   const r = await rpc({ jsonrpc: '2.0', id: 9, method: 'tools/call', params: { name: 'list_projects', arguments: {} } }, 'pmk_usr_demo_user');
   check('підроблений PAT → 401', r.status === 401, `got ${r.status}`);
 }
 
-// невідомий метод
 {
   const r = await rpc({ jsonrpc: '2.0', id: 10, method: 'no/such/method' }, ACCOUNT_TOKEN);
   check('невідомий метод → error -32601', r.json?.error?.code === -32601, `got ${r.json?.error?.code}`);

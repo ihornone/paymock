@@ -6,18 +6,9 @@ import type { DrizzleD1Database } from 'drizzle-orm/d1';
 import { clampLimit, DEFAULT_PAGE_SIZE } from '@/shared/utils/pagination';
 import type { WebhookLogRecord, CreateWebhookLogDTO } from '@/shared/types/models';
 
-/** How long a delivery log is kept before it is pruned. */
 export const WEBHOOK_LOG_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
-/** Pruning runs on roughly 1 in every N writes. */
 export const PRUNE_EVERY_N_WRITES = 50;
 
-/**
- * Columns the dashboard renders. `request_body` and `response_body` are
- * deliberately excluded: the UI never reads them, but they made up the bulk of
- * every dashboard payload and of the `webhook_logs` table size.
- *
- * Aliases keep the public API response shape (snake_case) unchanged.
- */
 export const DASHBOARD_WEBHOOK_COLUMNS = {
   id: webhookLogs.id,
   project_id: webhookLogs.project_id,
@@ -61,18 +52,11 @@ export class WebhooksRepository {
       })
       .returning();
 
-    // Retention: the table would otherwise grow without bound and every list
-    // query would scan more rows. Pruning is probabilistic so the cost is
-    // amortised instead of paid on every write.
     this.maybePrune(db);
 
     return log as WebhookLogRecord;
   }
 
-  /**
-   * Deletes delivery logs older than the retention window.
-   * Runs on roughly 1 in every `PRUNE_EVERY_N_WRITES` inserts.
-   */
   private maybePrune(db: DrizzleD1Database<typeof schema>): void {
     WebhooksRepository.writeCount += 1;
     if (WebhooksRepository.writeCount % PRUNE_EVERY_N_WRITES !== 0) return;
@@ -115,9 +99,6 @@ export class WebhooksRepository {
     return results as WebhookLogRecord[];
   }
 
-  /**
-   * Narrow projection for the dashboard feed — no request/response bodies.
-   */
   async listForDashboard(
     projectId: string,
     limit: number
@@ -134,10 +115,6 @@ export class WebhooksRepository {
     return results as DashboardWebhookLog[];
   }
 
-  /**
-   * Most recent log for an invoice. Used to report a delivery result without
-   * re-reading the full `request_body` / `response_body` payload.
-   */
   async findLatestByInvoice(
     projectId: string,
     invoiceId: string
@@ -154,10 +131,6 @@ export class WebhooksRepository {
     return (log as DashboardWebhookLog) ?? null;
   }
 
-  /**
-   * Retention: drop delivery logs older than the given cutoff.
-   * Without this the table grows without bound and every list query scans more rows.
-   */
   async pruneOlderThan(cutoffIso: string): Promise<number> {
     const db = await getDrizzle();
 
@@ -169,11 +142,6 @@ export class WebhooksRepository {
     return deleted.length;
   }
 
-  /**
-   * Change fingerprint of a project's delivery log: row count plus the newest
-   * `created_at`. A new webhook attempt moves at least one of them, which the
-   * dashboard poller uses to detect fresh delivery results without listing.
-   */
   async getRevision(projectId: string): Promise<{ count: number; maxCreated: string | null }> {
     const db = await getDrizzle();
 

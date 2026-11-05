@@ -40,32 +40,32 @@
   }
 
   .dark {
-    --background: 0 0% 7.1%; /* #121212 */
+    --background: 0 0% 7.1%;
     --foreground: 0 0% 98%;
-    --card: 0 0% 11.4%; /* #1d1d1d */
+    --card: 0 0% 11.4%;
     --card-foreground: 0 0% 98%;
-    --popover: 0 0% 11.4%; /* #1d1d1d */
+    --popover: 0 0% 11.4%;
     --popover-foreground: 0 0% 98%;
     --primary: 0 0% 98%;
     --primary-foreground: 0 0% 7.1%;
-    --secondary: 0 0% 14.5%; /* #252525 */
+    --secondary: 0 0% 14.5%;
     --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.5%; /* #252525 */
-    --muted-foreground: 0 0% 64%; /* #a3a3a3 */
-    --accent: 0 0% 16%; /* #292929 */
+    --muted: 0 0% 14.5%;
+    --muted-foreground: 0 0% 64%;
+    --accent: 0 0% 16%;
     --accent-foreground: 0 0% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 18%; /* #2e2e2e */
-    --input: 0 0% 18%; /* #2e2e2e */
+    --border: 0 0% 18%;
+    --input: 0 0% 18%;
     --ring: 0 0% 40%;
-    --sidebar-background: 0 0% 11.4%; /* #1d1d1d */
+    --sidebar-background: 0 0% 11.4%;
     --sidebar-foreground: 0 0% 98%;
     --sidebar-primary: 0 0% 98%;
     --sidebar-primary-foreground: 0 0% 7.1%;
-    --sidebar-accent: 0 0% 16%; /* #292929 */
+    --sidebar-accent: 0 0% 16%;
     --sidebar-accent-foreground: 0 0% 98%;
-    --sidebar-border: 0 0% 18%; /* #2e2e2e */
+    --sidebar-border: 0 0% 18%;
     --sidebar-ring: 0 0% 40%;
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
@@ -81,7 +81,6 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
-/* ==================== CUSTOM DARK SCROLLBAR ==================== */
 html {
   color-scheme: dark;
 }
@@ -91,7 +90,6 @@ html {
   scrollbar-color: hsl(240 3.7% 25%) transparent;
 }
 
-/* WebKit (Chrome, Edge, Safari, Electron) */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -120,7 +118,6 @@ html {
   background: transparent;
 }
 
-/* ==================== CLERK THEME OVERRIDES ==================== */
 .cl-userButtonPopoverCard {
   background-color: #1d1d1d !important;
   border: 1px solid #2e2e2e !important;
@@ -179,72 +176,71 @@ html {
   color: #f4f4f5 !important;
 }
 
-/* ==================== DOCUMENTATION PROSE STYLES ==================== */
-.prose-doc h1 { 
-  font-size: 1.75rem; 
-  font-weight: 800; 
+.prose-doc h1 {
+  font-size: 1.75rem;
+  font-weight: 800;
   letter-spacing: -0.025em;
-  border-bottom: 1px solid hsl(var(--border) / 0.6); 
-  padding-bottom: 0.875rem; 
-  margin-bottom: 1.5rem; 
-  color: hsl(var(--foreground)); 
-  line-height: 1.25; 
+  border-bottom: 1px solid hsl(var(--border) / 0.6);
+  padding-bottom: 0.875rem;
+  margin-bottom: 1.5rem;
+  color: hsl(var(--foreground));
+  line-height: 1.25;
 }
-@media (min-width: 640px) { 
-  .prose-doc h1 { font-size: 2.15rem; } 
+@media (min-width: 640px) {
+  .prose-doc h1 { font-size: 2.15rem; }
 }
-.prose-doc h2 { 
-  font-size: 1.25rem; 
-  font-weight: 700; 
+.prose-doc h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
   letter-spacing: -0.02em;
-  margin-top: 2.25rem; 
-  margin-bottom: 0.875rem; 
-  color: hsl(var(--foreground)); 
+  margin-top: 2.25rem;
+  margin-bottom: 0.875rem;
+  color: hsl(var(--foreground));
   line-height: 1.35;
 }
-@media (min-width: 640px) { 
-  .prose-doc h2 { font-size: 1.35rem; } 
+@media (min-width: 640px) {
+  .prose-doc h2 { font-size: 1.35rem; }
 }
-.prose-doc h3 { 
-  font-size: 1.05rem; 
-  font-weight: 600; 
+.prose-doc h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
   letter-spacing: -0.01em;
-  margin-top: 1.75rem; 
-  margin-bottom: 0.625rem; 
-  color: hsl(var(--foreground)); 
+  margin-top: 1.75rem;
+  margin-bottom: 0.625rem;
+  color: hsl(var(--foreground));
 }
-.prose-doc p { 
-  font-size: 0.875rem; 
-  line-height: 1.75; 
-  color: hsl(var(--muted-foreground)); 
-  margin-bottom: 1.25rem; 
-  word-break: break-word; 
+.prose-doc p {
+  font-size: 0.875rem;
+  line-height: 1.75;
+  color: hsl(var(--muted-foreground));
+  margin-bottom: 1.25rem;
+  word-break: break-word;
 }
-@media (min-width: 640px) { 
-  .prose-doc p { font-size: 0.925rem; } 
+@media (min-width: 640px) {
+  .prose-doc p { font-size: 0.925rem; }
 }
 .prose-doc strong {
   color: hsl(var(--foreground));
   font-weight: 600;
 }
-.prose-doc ul { 
-  list-style-type: disc; 
-  padding-left: 1.5rem; 
-  margin-bottom: 1.25rem; 
-  font-size: 0.875rem; 
-  line-height: 1.7; 
-  color: hsl(var(--muted-foreground)); 
+.prose-doc ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.875rem;
+  line-height: 1.7;
+  color: hsl(var(--muted-foreground));
 }
-.prose-doc ol { 
-  list-style-type: decimal; 
-  padding-left: 1.5rem; 
-  margin-bottom: 1.25rem; 
-  font-size: 0.875rem; 
-  line-height: 1.7; 
-  color: hsl(var(--muted-foreground)); 
+.prose-doc ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.875rem;
+  line-height: 1.7;
+  color: hsl(var(--muted-foreground));
 }
-.prose-doc li { 
-  margin-bottom: 0.45rem; 
+.prose-doc li {
+  margin-bottom: 0.45rem;
 }
 .prose-doc li::marker {
   color: hsl(var(--primary) / 0.7);
@@ -264,83 +260,82 @@ html {
   border-top: 1px solid hsl(var(--border) / 0.6);
   margin: 2rem 0;
 }
-.prose-doc code:not(pre code) { 
-  background-color: hsl(var(--secondary) / 0.8); 
-  color: hsl(var(--foreground)); 
-  padding: 0.2rem 0.4rem; 
-  border-radius: 0.375rem; 
+.prose-doc code:not(pre code) {
+  background-color: hsl(var(--secondary) / 0.8);
+  color: hsl(var(--foreground));
+  padding: 0.2rem 0.4rem;
+  border-radius: 0.375rem;
   border: 1px solid hsl(var(--border) / 0.5);
-  font-size: 0.8125rem; 
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; 
+  font-size: 0.8125rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
-.prose-doc blockquote { 
-  border-left: 3px solid hsl(var(--primary)); 
+.prose-doc blockquote {
+  border-left: 3px solid hsl(var(--primary));
   background-color: hsl(var(--primary) / 0.05);
   border-radius: 0 0.5rem 0.5rem 0;
-  padding: 0.875rem 1.25rem; 
-  margin: 1.5rem 0; 
-  font-style: italic; 
-  color: hsl(var(--foreground) / 0.9); 
+  padding: 0.875rem 1.25rem;
+  margin: 1.5rem 0;
+  font-style: italic;
+  color: hsl(var(--foreground) / 0.9);
 }
-.prose-doc table { 
-  width: 100%; 
-  border-collapse: separate; 
+.prose-doc table {
+  width: 100%;
+  border-collapse: separate;
   border-spacing: 0;
-  margin: 1.5rem 0; 
-  font-size: 0.8125rem; 
-  display: block; 
-  overflow-x: auto; 
+  margin: 1.5rem 0;
+  font-size: 0.8125rem;
+  display: block;
+  overflow-x: auto;
   border-radius: 0.75rem;
   border: 1px solid hsl(var(--border) / 0.6);
   background-color: hsl(var(--card));
 }
-.prose-doc th { 
-  border-bottom: 1px solid hsl(var(--border) / 0.6); 
-  background-color: hsl(var(--muted) / 0.5); 
-  padding: 0.75rem 1rem; 
-  text-align: left; 
-  font-weight: 600; 
+.prose-doc th {
+  border-bottom: 1px solid hsl(var(--border) / 0.6);
+  background-color: hsl(var(--muted) / 0.5);
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-weight: 600;
   color: hsl(var(--foreground));
 }
-.prose-doc td { 
-  border-bottom: 1px solid hsl(var(--border) / 0.4); 
-  padding: 0.75rem 1rem; 
-  color: hsl(var(--muted-foreground)); 
+.prose-doc td {
+  border-bottom: 1px solid hsl(var(--border) / 0.4);
+  padding: 0.75rem 1rem;
+  color: hsl(var(--muted-foreground));
 }
 .prose-doc tr:last-child td {
   border-bottom: none;
 }
-.prose-doc details { 
-  border: 1px solid hsl(var(--border) / 0.6); 
-  border-radius: 0.75rem; 
-  background-color: hsl(var(--card)); 
-  margin: 1rem 0; 
-  overflow: hidden; 
-  transition: all 0.2s ease; 
+.prose-doc details {
+  border: 1px solid hsl(var(--border) / 0.6);
+  border-radius: 0.75rem;
+  background-color: hsl(var(--card));
+  margin: 1rem 0;
+  overflow: hidden;
+  transition: all 0.2s ease;
 }
-.prose-doc details[open] { 
-  border-color: hsl(var(--border)); 
-  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.3); 
+.prose-doc details[open] {
+  border-color: hsl(var(--border));
+  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.3);
 }
-.prose-doc summary { 
-  display: flex; 
-  align-items: center; 
-  justify-content: space-between; 
-  gap: 0.75rem; 
-  padding: 0.875rem 1.125rem; 
-  font-size: 0.875rem; 
-  font-weight: 500; 
-  cursor: pointer; 
-  user-select: none; 
-  list-style: none; 
-  transition: background-color 0.15s ease; 
+.prose-doc summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.875rem 1.125rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  transition: background-color 0.15s ease;
 }
 .prose-doc summary::-webkit-details-marker { display: none; }
-.prose-doc details summary:hover { 
-  background-color: hsl(var(--muted) / 0.3); 
+.prose-doc details summary:hover {
+  background-color: hsl(var(--muted) / 0.3);
 }
-.prose-doc details[open] summary { 
-  border-bottom: 1px solid hsl(var(--border) / 0.6); 
-  background-color: hsl(var(--muted) / 0.2); 
+.prose-doc details[open] summary {
+  border-bottom: 1px solid hsl(var(--border) / 0.6);
+  background-color: hsl(var(--muted) / 0.2);
 }
-

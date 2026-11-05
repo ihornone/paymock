@@ -15,8 +15,6 @@ export async function validateMerchantToken(req: NextRequest): Promise<{ project
     );
   }
 
-  // Resolved through the in-isolate token cache to avoid a D1 round trip on
-  // every merchant API call.
   const project = await findProjectByToken(token);
 
   if (!project) {
