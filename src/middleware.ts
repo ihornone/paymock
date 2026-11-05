@@ -4,7 +4,8 @@ import { readRuntimeEnv } from '@/shared/config/runtime-env';
 
 export function middleware(request: NextRequest) {
   const nonce = btoa(crypto.randomUUID());
-  const csp = buildContentSecurityPolicy(nonce);
+  const isPayRoute = request.nextUrl.pathname.startsWith('/pay');
+  const csp = buildContentSecurityPolicy(nonce, isPayRoute);
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-nonce', nonce);
@@ -14,6 +15,10 @@ export function middleware(request: NextRequest) {
     request: { headers: requestHeaders },
   });
   response.headers.set('Content-Security-Policy', csp);
+
+  if (isPayRoute) {
+    response.headers.delete('x-frame-options');
+  }
 
   return response;
 }
@@ -42,9 +47,10 @@ function getClerkOrigins(publishableKey: string | undefined): string[] {
   }
 }
 
-function buildContentSecurityPolicy(nonce: string): string {
+function buildContentSecurityPolicy(nonce: string, isPayRoute = false): string {
   const origins = getClerkOrigins(readRuntimeEnv('NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY'));
   const clerkOrigins = origins.length > 0 ? ` ${origins.join(' ')}` : '';
+  const frameAncestors = isPayRoute ? "frame-ancestors *" : "frame-ancestors 'self'";
 
   return [
     "default-src 'self'",
@@ -54,7 +60,7 @@ function buildContentSecurityPolicy(nonce: string): string {
     "font-src 'self' data:",
     `connect-src 'self'${clerkOrigins}`,
     `frame-src 'self'${clerkOrigins}`,
-    "frame-ancestors 'self'",
+    frameAncestors,
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

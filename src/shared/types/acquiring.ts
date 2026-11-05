@@ -22,6 +22,7 @@ export interface BasketItem {
   name: string;
   qty: number;
   sum: number;
+  price?: number | null;
   total?: number;
   icon?: string | null;
   img?: string | null;

@@ -83,8 +83,17 @@ export async function POST(req: NextRequest) {
 
   const normalizedBasket = body.merchantPaymInfo?.basketOrder?.map((item) => {
     const itemImg = item.icon || item.img || item.image || item.picture || null;
+    const priceNum = typeof (item as any).price === 'number' ? (item as any).price : undefined;
+    const qtyNum = typeof item.qty === 'number' ? item.qty : 1;
+    const itemSum =
+      typeof item.sum === 'number'
+        ? item.sum
+        : priceNum !== undefined
+          ? priceNum * qtyNum
+          : 0;
     return {
       ...item,
+      sum: itemSum,
       icon: itemImg,
     };
   });

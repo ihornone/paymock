@@ -143,14 +143,24 @@ export function CheckoutClient({ invoice, project }: CheckoutClientProps) {
     }
   }, [invoice.basket_json]);
 
-  const basketTotal = React.useMemo(
+  const rawBasketTotal = React.useMemo(
     () =>
       basket.reduce(
-        (acc, item) => acc + (item.total ?? (item.sum * (item.qty || 1) || 0)),
+        (acc, item) =>
+          acc +
+          (item.total ??
+            (item.sum !== undefined
+              ? item.sum * (item.qty || 1)
+              : (item.price || 0) * (item.qty || 1))),
         0
       ),
     [basket]
   );
+
+  const isMajorUnits =
+    rawBasketTotal > 0 && Math.round(rawBasketTotal * 100) === invoice.amount;
+  const unitMultiplier = isMajorUnits ? 100 : 1;
+  const basketTotal = rawBasketTotal * unitMultiplier;
   const basketMismatch = basket.length > 0 && basketTotal !== invoice.amount;
 
   const targetUrl = invoice.success_url || invoice.redirect_url;
@@ -366,6 +376,12 @@ export function CheckoutClient({ invoice, project }: CheckoutClientProps) {
                       )}
                       {basket.map((item, idx) => {
                         const itemPhoto = item.icon || item.img || item.image || item.picture || null;
+                        const itemRawTotal =
+                          item.total ??
+                          (item.sum !== undefined
+                            ? item.sum * (item.qty || 1)
+                            : (item.price || 0) * (item.qty || 1));
+                        const itemAmountInCents = itemRawTotal * unitMultiplier;
                         return (
                           <div key={idx} className="pt-3 first:pt-0 flex items-center justify-between gap-3 text-xs sm:text-sm">
                             <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
@@ -379,7 +395,7 @@ export function CheckoutClient({ invoice, project }: CheckoutClientProps) {
                             </div>
                             <div className="text-right shrink-0">
                               <span className="font-semibold text-foreground font-mono text-xs sm:text-sm">
-                                {formatCurrencyAmount((item.total || item.sum * item.qty), invoice.ccy)}
+                                {formatCurrencyAmount(itemAmountInCents, invoice.ccy)}
                               </span>
                             </div>
                           </div>
