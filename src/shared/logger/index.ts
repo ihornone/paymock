@@ -9,12 +9,6 @@ export interface LogContext {
   [key: string]: unknown;
 }
 
-/**
- * Field names whose values must never reach the log output.
- *
- * Matches the redaction list used by the API client and error handling skills:
- * credentials, tokens and personal data.
- */
 export const REDACTED_KEYS = new Set([
   'x-token',
   'token',
@@ -71,12 +65,6 @@ function sanitizeValue(key: string, value: unknown): unknown {
   return value;
 }
 
-/**
- * Structured logger.
- *
- * Every entry carries `timestamp`, `level`, `service` and `event`. Secrets are
- * redacted before serialization.
- */
 export const logger = {
   debug(context: LogContext): void {
     if (process.env.NODE_ENV === 'production' && process.env.LOG_LEVEL !== 'debug') {
@@ -117,10 +105,6 @@ export const logger = {
     );
   },
 
-  /**
-   * 4xx rejections are expected outcomes, not defects — they are logged at
-   * `info` level so that error tracking stays signal-rich.
-   */
   error(context: LogContext): void {
     const sanitized = sanitizeValue('root', context) as LogContext;
     console.error(

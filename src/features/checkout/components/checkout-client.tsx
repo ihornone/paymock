@@ -2,15 +2,15 @@
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
-import { 
-  Building2, 
-  Package, 
-  CreditCard, 
-  CheckCircle2, 
-  XCircle, 
-  ArrowRight, 
-  ShieldCheck, 
-  RefreshCw, 
+import {
+  Building2,
+  Package,
+  CreditCard,
+  CheckCircle2,
+  XCircle,
+  ArrowRight,
+  ShieldCheck,
+  RefreshCw,
   ShoppingBag,
   Clock,
   AlertCircle
@@ -24,7 +24,6 @@ interface CheckoutClientProps {
   project: Project | null;
 }
 
-// Resilient product image component with image-error fallback
 function ProductImage({ src, alt }: { src?: string | null; alt: string }) {
   const [hasError, setHasError] = React.useState(false);
 
@@ -48,7 +47,6 @@ function ProductImage({ src, alt }: { src?: string | null; alt: string }) {
   );
 }
 
-// Resilient merchant avatar/logo component
 function MerchantAvatar({ logoUrl, name }: { logoUrl?: string | null; name?: string }) {
   const [hasError, setHasError] = React.useState(false);
 
@@ -87,7 +85,6 @@ export function CheckoutClient({ invoice, project }: CheckoutClientProps) {
   const [redirectCountdown, setRedirectCountdown] = React.useState<number | null>(null);
   const [redirectTarget, setRedirectTarget] = React.useState<string | null>(null);
 
-  // 15-minute validity & countdown timer (default 900 seconds)
   const validitySec = invoice.validity || 900;
   const createdAtMs = React.useMemo(() => new Date(invoice.created_date).getTime(), [invoice.created_date]);
   const expiresAtMs = React.useMemo(() => createdAtMs + validitySec * 1000, [createdAtMs, validitySec]);
@@ -116,10 +113,9 @@ export function CheckoutClient({ invoice, project }: CheckoutClientProps) {
   const timerSeconds = timeLeft % 60;
   const formattedCountdown = `${timerMinutes.toString().padStart(2, '0')}:${timerSeconds.toString().padStart(2, '0')}`;
 
-  // 1) Automatic Theme: Synchronize dynamically with user's device/phone preference
   React.useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    
+
     const applySystemTheme = (isDarkTheme: boolean) => {
       if (isDarkTheme) {
         document.documentElement.classList.add('dark');
@@ -128,10 +124,8 @@ export function CheckoutClient({ invoice, project }: CheckoutClientProps) {
       }
     };
 
-    // Apply initial system theme
     applySystemTheme(mediaQuery.matches);
 
-    // Listen to OS / phone theme changes in real-time
     const listener = (e: MediaQueryListEvent) => {
       applySystemTheme(e.matches);
     };
@@ -149,11 +143,6 @@ export function CheckoutClient({ invoice, project }: CheckoutClientProps) {
     }
   }, [invoice.basket_json]);
 
-  // Sandbox integrity check: the contract binds the basket to the same units
-  // as `amount` (kopiyky). An integration that sends hryvnias in the basket
-  // while the invoice total is in kopiyky renders items that do not add up to
-  // the invoice — surface the mismatch instead of silently showing numbers
-  // that make the integrator doubt the display.
   const basketTotal = React.useMemo(
     () =>
       basket.reduce(
@@ -166,7 +155,6 @@ export function CheckoutClient({ invoice, project }: CheckoutClientProps) {
 
   const targetUrl = invoice.success_url || invoice.redirect_url;
 
-  // Emit postMessage to parent window / opener (supports modals, iframes & popups on merchant site)
   React.useEffect(() => {
     if (typeof window !== 'undefined' && invoice.status) {
       const messagePayload = {
@@ -187,7 +175,6 @@ export function CheckoutClient({ invoice, project }: CheckoutClientProps) {
     }
   }, [invoice.status, invoice.id, invoice.amount, invoice.ccy]);
 
-  // Auto redirect effect on success (10 seconds to read the text)
   React.useEffect(() => {
     if (invoice.status === 'success' && targetUrl) {
       setRedirectTarget(targetUrl);
@@ -217,7 +204,7 @@ export function CheckoutClient({ invoice, project }: CheckoutClientProps) {
         body: JSON.stringify({ action }),
       });
       const data = await res.json();
-      
+
       if (data.redirectUrl) {
         setRedirectTarget(data.redirectUrl);
       }
@@ -233,7 +220,6 @@ export function CheckoutClient({ invoice, project }: CheckoutClientProps) {
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center p-3 sm:p-6 antialiased selection:bg-primary/20 transition-colors duration-200">
-      {/* Brand Header */}
       <header className="mb-4 sm:mb-6 flex items-center justify-center gap-2">
         <span className="text-xl sm:text-2xl font-black tracking-tight text-foreground font-mono">paymock</span>
         <span className="rounded border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground uppercase">
@@ -241,9 +227,7 @@ export function CheckoutClient({ invoice, project }: CheckoutClientProps) {
         </span>
       </header>
 
-      {/* Main Payment Container Card */}
       <div className="w-full max-w-lg md:max-w-4xl bg-card rounded-xl shadow-xl border border-border overflow-hidden transition-all">
-        {/* Terminal Status Overlay if finished */}
         {invoice.status === 'success' ? (
           <div className="p-6 sm:p-14 text-center space-y-5 animate-in fade-in-0 duration-300">
             <div className="mx-auto flex h-16 w-16 sm:h-20 sm:w-20 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
@@ -335,12 +319,9 @@ export function CheckoutClient({ invoice, project }: CheckoutClientProps) {
             </div>
           </div>
         ) : (
-          /* Active Checkout View: Responsive Two Column Layout */
           <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-border">
-            {/* ================= LEFT COLUMN: Merchant, Order ID & Basket Items ================= */}
             <div className="p-5 sm:p-8 md:p-10 flex flex-col justify-between space-y-6 sm:space-y-8 bg-card">
               <div className="space-y-5 sm:space-y-6">
-                {/* Merchant Icon & Name with Real Photo Support */}
                 <div className="flex flex-col items-center text-center space-y-3">
                   <MerchantAvatar logoUrl={project?.logo_url} name={project?.name} />
                   <div>
@@ -349,14 +330,13 @@ export function CheckoutClient({ invoice, project }: CheckoutClientProps) {
                     </h3>
                   </div>
 
-                  {/* 3) Unique Order ID Format & 15-min Validity Countdown */}
                   <div className="flex flex-col items-center gap-2">
                     <p className="text-xs sm:text-sm font-medium text-muted-foreground">
                       Оплата замовлення <span className="font-mono font-semibold text-foreground">#{invoice.id}</span>
                     </p>
                     <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-mono transition-colors ${
-                      timeLeft < 120 
-                        ? 'border-amber-500/50 bg-amber-500/10 text-amber-500 font-semibold animate-pulse' 
+                      timeLeft < 120
+                        ? 'border-amber-500/50 bg-amber-500/10 text-amber-500 font-semibold animate-pulse'
                         : 'border-border bg-secondary/60 text-muted-foreground'
                     }`}>
                       <Clock className="h-3.5 w-3.5 text-primary" />
@@ -365,7 +345,6 @@ export function CheckoutClient({ invoice, project }: CheckoutClientProps) {
                   </div>
                 </div>
 
-                {/* Basket order summary (Товари в кошику) */}
                 <div className="pt-4 border-t border-border">
                   <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 sm:mb-4">
                     <ShoppingBag className="h-3.5 w-3.5" />
@@ -426,14 +405,12 @@ export function CheckoutClient({ invoice, project }: CheckoutClientProps) {
                 </div>
               </div>
 
-              {/* Security info note */}
               <div className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground pt-2 border-t border-border/60">
                 <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
                 <span>Захищено Paymock Acquiring Sandbox</span>
               </div>
             </div>
 
-            {/* ================= RIGHT COLUMN: Card Form & Pay Button ================= */}
             <div className="p-5 sm:p-8 md:p-10 flex flex-col justify-start space-y-6 sm:space-y-8 bg-card/60">
               <div className="space-y-5 sm:space-y-6">
                 <div className="flex items-center justify-between pb-1 border-b border-border/60">
@@ -447,7 +424,6 @@ export function CheckoutClient({ invoice, project }: CheckoutClientProps) {
                   </div>
                 </div>
 
-                {/* Card Payment Form */}
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
@@ -455,7 +431,6 @@ export function CheckoutClient({ invoice, project }: CheckoutClientProps) {
                   }}
                   className="space-y-4"
                 >
-                  {/* Card Number Field */}
                   <div className="relative rounded-lg border border-input bg-background px-3.5 pt-3.5 pb-2 shadow-xs focus-within:border-primary focus-within:ring-1 focus-within:ring-ring transition">
                     <label
                       htmlFor="checkout-card-number"
@@ -478,7 +453,6 @@ export function CheckoutClient({ invoice, project }: CheckoutClientProps) {
                     </div>
                   </div>
 
-                  {/* Expiry & CVC Grid */}
                   <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
                     <div className="relative rounded-lg border border-input bg-background px-3.5 pt-3.5 pb-2 shadow-xs focus-within:border-primary focus-within:ring-1 focus-within:ring-ring transition">
                       <label
@@ -520,7 +494,6 @@ export function CheckoutClient({ invoice, project }: CheckoutClientProps) {
                     </div>
                   </div>
 
-                  {/* Main Pay Button with Amount */}
                   <button
                     type="submit"
                     disabled={invoice.status !== 'created' || !!loadingAction}
@@ -545,7 +518,6 @@ export function CheckoutClient({ invoice, project }: CheckoutClientProps) {
         )}
       </div>
 
-      {/* Footer disclaimer */}
       <footer className="mt-4 sm:mt-6 text-center text-xs text-muted-foreground">
         <p>Paymock — емулятор платіжного шлюзу для розробки та тестування.</p>
       </footer>

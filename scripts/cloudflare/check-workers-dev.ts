@@ -1,32 +1,4 @@
 #!/usr/bin/env tsx
-/**
- * Checks whether the public `*.workers.dev` subdomain is enabled for the
- * account's Workers.
- *
- * Why this matters:
- *
- * A Worker is reachable through two independent hostnames:
- *
- *   - the custom domain (e.g. `paymock.ihornone.site`), which is routed
- *     through Cloudflare's zone and is therefore covered by the zone's WAF,
- *     rate-limiting rules and Access policies;
- *   - the `*.workers.dev` subdomain, which is served by a *different*,
- *     internal zone that has none of them.
- *
- * With the subdomain enabled, the second hostname is a way around every
- * edge control that was configured for the first one. An attacker who knows
- * the subdomain can hammer the API without ever touching the zone's
- * rate-limiting rules, and without leaving the zone's logs.
- *
- * The subdomain should therefore be disabled, or the Worker should be
- * protected with a Cloudflare Access policy in front of it.
- *
- * Usage:
- *   CLOUDFLARE_API_TOKEN=… CLOUDFLARE_ACCOUNT_ID=… tsx scripts/cloudflare/check-workers-dev.ts
- *   … --strict   # exit 1 when the subdomain is enabled (for CI)
- *
- * The API token is only ever sent in the `Authorization` header.
- */
 
 const API_BASE = 'https://api.cloudflare.com/client/v4';
 
@@ -35,7 +7,6 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-/** The repository root — the scripts live in `scripts/cloudflare/`. */
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 const STRICT = process.argv.includes('--strict');
@@ -45,16 +16,6 @@ interface SubdomainResponse {
   subdomain?: string;
 }
 
-/**
- * The Cloudflare API token.
- *
- * `CLOUDFLARE_API_TOKEN` wins. When it is absent, the OAuth token that
- * `wrangler login` wrote into the Wrangler config is used — the same
- * fallback as `scripts/d1-client.ts`, so an operator who is already logged
- * in does not have to export anything.
- *
- * The token is never printed.
- */
 let cachedToken: string | null = null;
 
 function getApiToken(): string {
@@ -83,20 +44,12 @@ function getApiToken(): string {
       }
     }
   } catch {
-    // The config is unreadable (missing home directory, permissions) — the
-    // environment variable is the only remaining source.
   }
 
   cachedToken = '';
   return cachedToken;
 }
 
-/**
- * The Cloudflare account id.
- *
- * `CLOUDFLARE_ACCOUNT_ID` wins; otherwise the id is taken from
- * `wrangler.toml`, which is where the deployment is configured anyway.
- */
 function getAccountId(): string {
   const fromEnv = process.env.CLOUDFLARE_ACCOUNT_ID;
   if (fromEnv) return fromEnv.trim();
@@ -106,8 +59,6 @@ function getAccountId(): string {
     const match = content.match(/^\s*account_id\s*=\s*"([^"]+)"/m);
     if (match?.[1]) return match[1];
   } catch {
-    // No wrangler.toml in the checkout — the environment variable is the
-    // only remaining source.
   }
 
   return '';
@@ -161,10 +112,6 @@ async function main(): Promise<void> {
   const result = payload.result ?? {};
   const subdomain = (result.subdomain ?? '').trim();
 
-  // The API does NOT return an `enabled` flag for this endpoint: it answers
-  // with the subdomain name when the workers.dev route is on, and with an
-  // empty string when it is off. Reading a missing `enabled` field used to
-  // make this check report "disabled" for an account that *is* exposed.
   const enabled = subdomain.length > 0;
 
   if (!enabled) {
@@ -210,8 +157,4 @@ main().catch((error: unknown) => {
   process.exit(1);
 });
 
-// The explicit module marker keeps this file a module even if every import
-// above is ever removed — without it TypeScript would treat the file as a
-// global script and its top-level declarations would collide with the other
-// scripts in `scripts/`.
 export {};

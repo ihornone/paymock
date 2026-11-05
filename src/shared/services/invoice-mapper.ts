@@ -1,9 +1,6 @@
 import type { InvoiceRecord } from '@/shared/types/models';
 import type { InvoiceStatusResponse } from '@/shared/types/acquiring';
 
-/**
- * Transforms an internal database InvoiceRecord into the public Acquiring API InvoiceStatusResponse.
- */
 export function toInvoiceStatusResponse(invoice: InvoiceRecord): InvoiceStatusResponse {
   return {
     invoiceId: invoice.id,

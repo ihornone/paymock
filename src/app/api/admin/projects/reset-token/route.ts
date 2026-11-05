@@ -7,15 +7,7 @@ import { logger } from '@/shared/logger';
 
 const NO_STORE = { 'Cache-Control': 'private, no-store' } as const;
 
-/**
- * Rotates the merchant token of a project.
- *
- * The old token stops working immediately — only the hash of the new one is
- * stored. The new token is returned exactly once.
- */
 export async function POST(req: NextRequest) {
-  // The session is checked before the body is read: without a session the
-  // request is refused with 401 regardless of what it carries.
   const guard = await guardAdminMutation(req, {
     action: 'project.token.rotate',
     targetType: 'project',
@@ -42,7 +34,6 @@ export async function POST(req: NextRequest) {
 
   const projectsRepo = new ProjectsRepository();
 
-  // Ownership is part of the WHERE clause of the UPDATE.
   const rotated = await projectsRepo.resetToken(body.projectId, actor.userId);
 
   if (!rotated) {
@@ -64,7 +55,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // The rotated-away token must not stay valid in the in-isolate cache.
   invalidateTokenCacheForProject(rotated.project.id);
 
   await recordAudit({
@@ -88,7 +78,6 @@ export async function POST(req: NextRequest) {
     {
       success: true,
       project: rotated.project,
-      // Shown once — only its hash is stored.
       token: rotated.token,
     },
     { headers: NO_STORE }

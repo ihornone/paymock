@@ -2,19 +2,6 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 import { readRuntimeEnv } from '@/shared/config/runtime-env';
 
-/**
- * Content Security Policy with a per-request nonce.
- *
- * Next.js delivers the React Server Component payload through inline
- * `<script>self.__next_f.push(...)</script>` tags. A `script-src` without
- * `'unsafe-inline'` therefore blocks the application bootstrap and the page
- * stays blank — Next.js reads the nonce from the `Content-Security-Policy`
- * *request* header and applies it to its own inline scripts.
- *
- * The middleware matcher deliberately excludes API routes and static assets:
- * JSON responses have no inline scripts to protect, and skipping them keeps
- * the middleware off the hot path of every API call.
- */
 export function middleware(request: NextRequest) {
   const nonce = btoa(crypto.randomUUID());
   const csp = buildContentSecurityPolicy(nonce);
@@ -31,31 +18,33 @@ export function middleware(request: NextRequest) {
   return response;
 }
 
-/**
- * Derives the Clerk Frontend API origin from the publishable key.
- *
- * The key is `pk_<env>_<base64 of the instance host>`, so the host the Clerk
- * SDK has to talk to can be recovered without hard-coding it. A CSP that
- * omits this origin blocks the Clerk API calls and the dashboard never
- * finishes loading.
- */
-function getClerkApiOrigin(publishableKey: string | undefined): string | null {
-  if (!publishableKey) return null;
+function getClerkOrigins(publishableKey: string | undefined): string[] {
+  if (!publishableKey) return [];
 
   const parts = publishableKey.split('_');
-  if (parts.length < 3) return null;
+  if (parts.length < 3) return [];
 
   try {
     const host = atob(parts[2]).replace(/[^a-zA-Z0-9.-]/g, '');
-    return host.includes('.') ? `https://${host}` : null;
+    if (!host.includes('.')) return [];
+
+    const rootDomain = host.startsWith('clerk.') ? host.slice(6) : host;
+    return Array.from(
+      new Set([
+        `https://${host}`,
+        `https://${rootDomain}`,
+        `https://accounts.${rootDomain}`,
+        'https://challenges.cloudflare.com',
+      ])
+    );
   } catch {
-    return null;
+    return [];
   }
 }
 
 function buildContentSecurityPolicy(nonce: string): string {
-  const clerkOrigin = getClerkApiOrigin(readRuntimeEnv('NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY'));
-  const clerkOrigins = clerkOrigin ? ` ${clerkOrigin}` : '';
+  const origins = getClerkOrigins(readRuntimeEnv('NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY'));
+  const clerkOrigins = origins.length > 0 ? ` ${origins.join(' ')}` : '';
 
   return [
     "default-src 'self'",
@@ -75,12 +64,6 @@ function buildContentSecurityPolicy(nonce: string): string {
 
 export const config = {
   matcher: [
-    /*
-     * Everything except:
-     *  - /api/*        (JSON, no inline scripts, keeps the hot path free)
-     *  - /_next/*      (build output)
-     *  - static files
-     */
     '/((?!api|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)',
   ],
 };

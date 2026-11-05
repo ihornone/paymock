@@ -87,7 +87,6 @@ export function RecentActivityTable() {
             </div>
           </CardHeader>
 
-          {/* INVOICES TAB */}
           <TabsContent value="invoices" className="m-0">
             <Table>
               <TableHeader className="bg-muted/30">
@@ -175,7 +174,6 @@ export function RecentActivityTable() {
             </div>
           </TabsContent>
 
-          {/* WEBHOOKS TAB */}
           <TabsContent value="webhooks" className="m-0">
             <Table>
               <TableHeader className="bg-muted/30">

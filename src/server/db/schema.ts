@@ -2,17 +2,6 @@ import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core';
 import { relations } from 'drizzle-orm';
 import type { InvoiceStatus, PaymentType } from '@/shared/types/acquiring';
 
-/**
- * 1. Projects Table (Merchants / Multi-tenant stores)
- *
- * Two columns carry secrets and are never selected into an API response:
- *  - `token_hash` — the SHA-256 of the merchant token. The plaintext token
- *    exists only in the response of the call that creates or rotates it;
- *  - `webhook_secret` — the HMAC key used to sign outgoing webhooks.
- *
- * `user_id` is NOT NULL: every project belongs to exactly one account, so an
- * owner-less row can never be listed, used or audited.
- */
 export const projects = sqliteTable(
   'projects',
   {
@@ -35,9 +24,6 @@ export const projects = sqliteTable(
   ]
 );
 
-/**
- * 2. Invoices Table (Payment Invoices)
- */
 export const invoices = sqliteTable(
   'invoices',
   {
@@ -69,17 +55,10 @@ export const invoices = sqliteTable(
   (table) => [
     index('idx_invoices_project').on(table.project_id),
     index('idx_invoices_status').on(table.status),
-    // Composite index for the dashboard hot path:
-    //   WHERE project_id = ? ORDER BY created_date DESC LIMIT n
-    // Without it SQLite sorts every matching row in a TEMP B-TREE before
-    // applying LIMIT — measured 192x slower at 100k invoices per project.
     index('idx_invoices_project_created').on(table.project_id, table.created_date),
   ]
 );
 
-/**
- * 3. Webhook Logs Table (Delivery audit log)
- */
 export const webhookLogs = sqliteTable(
   'webhook_logs',
   {
@@ -101,19 +80,10 @@ export const webhookLogs = sqliteTable(
   (table) => [
     index('idx_webhook_logs_invoice').on(table.invoice_id),
     index('idx_webhook_logs_project').on(table.project_id),
-    // Same composite pattern as `invoices` — the dashboard webhook feed is
-    // also `WHERE project_id = ? ORDER BY created_at DESC LIMIT n`.
     index('idx_webhook_logs_project_created').on(table.project_id, table.created_at),
   ]
 );
 
-/**
- * 4. Personal Access Tokens Table
- *
- * The MCP server and the account-wide API are authenticated with a personal
- * access token. The token itself is never stored — only its SHA-256 hash —
- * so a database leak cannot be replayed against the API.
- */
 export const personalAccessTokens = sqliteTable(
   'personal_access_tokens',
   {
@@ -131,13 +101,6 @@ export const personalAccessTokens = sqliteTable(
   ]
 );
 
-/**
- * 5. Audit Log
- *
- * Every state-changing operation leaves a row here: who did it, from where,
- * against which target and with which result. Anonymous attempts are logged
- * too — they are the interesting ones.
- */
 export const auditLog = sqliteTable(
   'audit_log',
   {
@@ -162,9 +125,6 @@ export const auditLog = sqliteTable(
 
 export type AuditLogRecord = typeof auditLog.$inferSelect;
 
-/**
- * Relational definitions for Drizzle Query API
- */
 export const projectsRelations = relations(projects, ({ many }) => ({
   invoices: many(invoices),
   webhookLogs: many(webhookLogs),

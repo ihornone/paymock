@@ -2,22 +2,11 @@ import { drizzle, type DrizzleD1Database } from 'drizzle-orm/d1';
 import * as schema from './schema';
 import type { D1Database } from '@cloudflare/workers-types';
 
-/** Timeout for a single query against the remote D1 HTTP bridge. */
 export const REMOTE_D1_TIMEOUT_MS = 15_000;
 
 let cachedToken: string | null = null;
 
-/**
- * Reads the Cloudflare API token used by the local D1 HTTP bridge.
- *
- * `node:fs` / `node:path` / `node:os` are imported dynamically: a static
- * import would pull the Node.js filesystem polyfill into the Worker bundle,
- * where it is dead weight but still costs module-evaluation time on every
- * cold start. The lookup only ever runs in local development, where the
- * production D1 binding is not available.
- */
 async function getCloudflareToken(forceRefresh = false): Promise<string> {
-  // An explicit API token from the environment does not expire on its own.
   if (process.env.CLOUDFLARE_API_TOKEN) {
     cachedToken = process.env.CLOUDFLARE_API_TOKEN;
     return cachedToken;
@@ -42,7 +31,6 @@ async function getCloudflareToken(forceRefresh = false): Promise<string> {
       }
     }
   } catch {
-    // Not running in Node.js — the D1 binding is used instead.
   }
   return '';
 }
@@ -52,21 +40,10 @@ async function queryRemoteD1(
   params: any[] = []
 ): Promise<{ results: any[]; changes: number }> {
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID || 'e468b6b0d602ac91b1c044b15a4c4fbe';
-  // The default is the **development** database (`paymock-dev-db`).
-  //
-  // The local dev server talks to Cloudflare over the REST API, so it needs a
-  // database id — and it must never be the production one: a dev server that
-  // writes to `paymock-db` creates test projects and invoices in real data.
-  // The production database is bound to the Worker in `wrangler.toml` and is
-  // only reached through that binding.
   const databaseId =
     process.env.CLOUDFLARE_DATABASE_ID || '2abd6467-dcfc-4fca-974b-7af75c3d4537';
   const token = await getCloudflareToken();
 
-  // A missing token used to trigger `execSync('npx wrangler whoami')` here.
-  // That is a blocking child-process spawn: measured at 3.78s of a fully
-  // blocked event loop, during which the isolate serves nothing at all.
-  // Fail fast instead — the token must come from the environment.
   if (!token) {
     throw new Error(
       'Cloudflare D1 API token is not configured. Set CLOUDFLARE_API_TOKEN to use the remote D1 bridge.'
@@ -89,10 +66,6 @@ async function queryRemoteD1(
   let response = await runQuery(token);
 
   if (response.status === 401 || response.status === 403) {
-    // The OAuth token that `wrangler login` writes expires. The cached copy
-    // was then used until the dev server was restarted — every query failed
-    // with "not authorized" while the *file* already held a fresh token.
-    // Re-read the file and try once more.
     const refreshed = await getCloudflareToken(true);
     if (refreshed && refreshed !== token) {
       response = await runQuery(refreshed);
@@ -176,14 +149,6 @@ class HttpD1Database {
 
 let devDrizzleInstance: DrizzleD1Database<typeof schema> | null = null;
 
-/**
- * Drizzle instances are cached per underlying D1 binding.
- *
- * The previous implementation built a fresh `drizzle(d1, { schema })` on every
- * repository call, and re-resolved the `@opennextjs/cloudflare` dynamic import
- * each time. With ~15 repository calls per request that is ~1ms of wasted CPU
- * and a fresh object graph per query.
- */
 const drizzleInstanceCache = new WeakMap<object, DrizzleD1Database<typeof schema>>();
 
 function getOrCreateDrizzle(d1: D1Database): DrizzleD1Database<typeof schema> {
@@ -198,7 +163,6 @@ function getOrCreateDrizzle(d1: D1Database): DrizzleD1Database<typeof schema> {
 export async function getDrizzle(): Promise<DrizzleD1Database<typeof schema>> {
   const isDev = process.env.NODE_ENV === 'development';
 
-  // 1. In development, use HttpD1Database adapter with token caching
   if (isDev) {
     if (!devDrizzleInstance) {
       const httpDb = new HttpD1Database() as unknown as D1Database;
@@ -207,7 +171,6 @@ export async function getDrizzle(): Promise<DrizzleD1Database<typeof schema>> {
     return devDrizzleInstance;
   }
 
-  // 2. In Cloudflare Workers / OpenNext production runtime
   try {
     const { getCloudflareContext } = await import('@opennextjs/cloudflare');
     const cfContext = (await getCloudflareContext({ async: true })) as any;
@@ -216,7 +179,6 @@ export async function getDrizzle(): Promise<DrizzleD1Database<typeof schema>> {
       return getOrCreateDrizzle(d1);
     }
   } catch {
-    // fallback to http bridge
   }
 
   if (!devDrizzleInstance) {

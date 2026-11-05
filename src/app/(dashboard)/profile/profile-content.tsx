@@ -21,9 +21,6 @@ import { DashboardRuntime } from '@/features/dashboard/components/dashboard-runt
 function ProfileContent() {
   const { user } = useDashboard();
 
-  // The personal access token is a real secret: it is generated on demand and
-  // only its SHA-256 hash is stored server-side. It is therefore shown only
-  // once — right after it was issued.
   const [accountToken, setAccountToken] = React.useState<string | null>(null);
   const [isIssuing, setIsIssuing] = React.useState(false);
   const [tokenError, setTokenError] = React.useState<string | null>(null);
@@ -73,7 +70,6 @@ function ProfileContent() {
         description="Керуйте даними облікового запису та глобальним персональним токеном для підключення AI-асистентів."
       />
 
-      {/* 1. User Profile Details Card */}
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2">
@@ -120,7 +116,6 @@ function ProfileContent() {
         </CardContent>
       </Card>
 
-      {/* 2. Global Personal Access Token (MCP Key) */}
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2">

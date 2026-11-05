@@ -6,23 +6,6 @@ import { guardAdminRead } from '@/server/auth/admin-guard';
 
 const NO_STORE = { 'Cache-Control': 'private, no-store' } as const;
 
-/**
- * The dashboard's change probe.
- *
- * The dashboard polls this instead of the full bootstrap payload: a payment
- * that happens in the checkout tab (or through the MCP / API surface) has to
- * appear in an open dashboard without a manual reload, but re-running the
- * four queries of `GET /api/admin/projects` every few seconds would spend the
- * account's database quota on responses that are identical anyway.
- *
- * The response is a single opaque revision string built from cheap aggregates
- * (row counts plus the newest `modified_date` / `created_at`) of the selected
- * project. The client refetches the dashboard only when the string changes.
- *
- * The project resolution mirrors the bootstrap route exactly: a `projectId`
- * parameter is honoured only when the project is owned by the session, and
- * the fallback is the first owned project.
- */
 export async function GET(req: NextRequest) {
   const guard = await guardAdminRead(req, 'project.revision');
   if (!guard.ok) return guard.error;

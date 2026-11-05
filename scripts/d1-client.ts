@@ -1,11 +1,3 @@
-/**
- * Minimal Cloudflare D1 client for the maintenance scripts.
- *
- * The scripts talk to the D1 REST API directly instead of going through the
- * application's database layer: a migration must be able to run against the
- * production database *before* the new application code is deployed.
- */
-
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -17,12 +9,6 @@ export interface D1QueryResult {
 
 const QUERY_TIMEOUT_MS = 30_000;
 
-/**
- * Reads the Cloudflare API token.
- *
- * The token may come from the environment or from the Wrangler config that
- * `wrangler login` wrote. It is never printed.
- */
 export function getApiToken(): string {
   const fromEnv = process.env.CLOUDFLARE_API_TOKEN;
   if (fromEnv) return fromEnv.trim();
@@ -55,12 +41,6 @@ export function getDatabaseId(): string {
   return id;
 }
 
-/**
- * Runs a SQL script against the database.
- *
- * Multiple statements separated by semicolons are executed as one script, so
- * a migration can be applied atomically.
- */
 export async function d1Query(sql: string, params: any[] = []): Promise<D1QueryResult> {
   const url = `https://api.cloudflare.com/client/v4/accounts/${getAccountId()}/d1/database/${getDatabaseId()}/query`;
 
@@ -102,13 +82,6 @@ export async function d1Query(sql: string, params: any[] = []): Promise<D1QueryR
   return { results, changes };
 }
 
-/**
- * Lists the tables of the database.
- *
- * Cloudflare's internal tables (`_cf_KV` and friends) are excluded: they are
- * not readable through the API (`SQLITE_AUTH`) and are not part of the
- * application data.
- */
 export async function listTables(): Promise<string[]> {
   const { results } = await d1Query(
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '\\_cf\\_%' ESCAPE '\\' ORDER BY name"
@@ -116,9 +89,6 @@ export async function listTables(): Promise<string[]> {
   return results.map((row: any) => row.name as string);
 }
 
-/**
- * Reads the columns of a table.
- */
 export async function listColumns(table: string): Promise<string[]> {
   const { results } = await d1Query(`PRAGMA table_info(${table})`);
   return results.map((row: any) => row.name as string);

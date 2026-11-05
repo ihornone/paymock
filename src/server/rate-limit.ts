@@ -5,13 +5,6 @@ interface RateLimitRecord {
   resetAt: number;
 }
 
-/**
- * Hard ceiling on the number of tracked buckets.
- *
- * The bucket key embeds a client-controlled value (an IP), so an attacker can
- * otherwise mint an unbounded number of entries and force a full sweep of the
- * map on the event loop. Oldest entries are evicted first.
- */
 export const MAX_RATE_LIMIT_BUCKETS = 10_000;
 export const RATE_LIMIT_CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
 export const DEFAULT_RATE_LIMIT = 60;
@@ -21,15 +14,6 @@ const rateLimitMap = new Map<string, RateLimitRecord>();
 
 let lastCleanupAt = 0;
 
-/**
- * Removes expired buckets.
- *
- * The sweep is triggered lazily from `checkRateLimit` instead of running on
- * a module-scope `setInterval`. A timer created at module scope is created in
- * *every* isolate and keeps an active handle alive for the whole lifetime of
- * the isolate, which is pure overhead on a runtime where the isolate is
- * discarded right after the response.
- */
 function sweepExpiredBuckets(now: number): void {
   if (now - lastCleanupAt < RATE_LIMIT_CLEANUP_INTERVAL_MS) return;
   lastCleanupAt = now;
@@ -51,13 +35,12 @@ export interface RateLimitResult {
   success: boolean;
   limit: number;
   remaining: number;
-  reset: number; // Unix timestamp in seconds
+  reset: number;
 }
 
 function evictIfNeeded(): void {
   if (rateLimitMap.size < MAX_RATE_LIMIT_BUCKETS) return;
 
-  // Evict expired entries first.
   const now = Date.now();
   for (const [key, record] of rateLimitMap.entries()) {
     if (now > record.resetAt) {
@@ -65,7 +48,6 @@ function evictIfNeeded(): void {
     }
   }
 
-  // Still full: drop the oldest entries. Map preserves insertion order.
   while (rateLimitMap.size >= MAX_RATE_LIMIT_BUCKETS) {
     const oldestKey = rateLimitMap.keys().next().value;
     if (oldestKey === undefined) break;
@@ -73,9 +55,6 @@ function evictIfNeeded(): void {
   }
 }
 
-/**
- * Checks request rate limit against an in-memory sliding window bucket.
- */
 export function checkRateLimit({
   key,
   limit = DEFAULT_RATE_LIMIT,
@@ -116,20 +95,10 @@ export function checkRateLimit({
   };
 }
 
-/**
- * Resets every bucket. Used by tests so counters do not leak between cases.
- */
 export function resetRateLimits(): void {
   rateLimitMap.clear();
 }
 
-/**
- * Extracts the client IP address used for rate-limit bucketing.
- *
- * `cf-connecting-ip` is set by the Cloudflare edge and cannot be spoofed by
- * the client, so it is preferred. `x-forwarded-for` is only consulted as a
- * last resort because its first entry is fully client-controlled.
- */
 export function getClientIp(req: Request): string {
   const edgeIp = req.headers.get('cf-connecting-ip');
   if (edgeIp) {
@@ -149,9 +118,6 @@ export function getClientIp(req: Request): string {
   return '127.0.0.1';
 }
 
-/**
- * Formats a standard 429 Too Many Requests response with HTTP rate limit headers.
- */
 export function rateLimitResponse(
   limitResult: RateLimitResult,
   message = 'Rate limit exceeded. Please try again later.'

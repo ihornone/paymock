@@ -73,7 +73,6 @@ export function StatusBadge({
     );
   }
 
-  // Invoice status
   const normalizedStatus = String(status).toLowerCase();
 
   switch (normalizedStatus) {

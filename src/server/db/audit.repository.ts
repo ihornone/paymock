@@ -3,14 +3,6 @@ import { getDrizzle } from './drizzle';
 import { auditLog } from './schema';
 import { logger } from '@/shared/logger';
 
-/**
- * Audit trail of every state-changing operation.
- *
- * Before this table existed, an anonymous request could create a project and
- * leave no trace anywhere — no row in the database, no distinguishable log
- * line, nothing to alert on.
- */
-
 export type AuditResult = 'success' | 'denied' | 'error';
 
 export interface AuditEntry {
@@ -25,13 +17,6 @@ export interface AuditEntry {
   detail?: string | null;
 }
 
-/**
- * Writes an audit row.
- *
- * The write is awaited so that a successful mutation always leaves a trace;
- * a failure to write must not be silently swallowed, but it also must not
- * roll back the operation that was already performed — the error is logged.
- */
 export async function recordAudit(entry: AuditEntry): Promise<void> {
   try {
     const db = await getDrizzle();
@@ -58,9 +43,6 @@ export async function recordAudit(entry: AuditEntry): Promise<void> {
   }
 }
 
-/**
- * Recent audit entries — newest first.
- */
 export async function listAudit(limit: number = 100): Promise<
   Array<{
     id: string;

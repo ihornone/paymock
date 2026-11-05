@@ -26,21 +26,10 @@ interface DocsShellProps {
   currentArticle?: DocArticle;
   prevArticle?: DocArticle | null;
   nextArticle?: DocArticle | null;
-  /**
-   * Whether the visitor carries a usable credential. Anonymous visitors read
-   * the same articles — the banner is the placeholder that tells them where
-   * their own token would come from.
-   */
   isAuthenticated?: boolean;
   children: React.ReactNode;
 }
 
-/**
- * The docs shell is the shared app frame (same sidebar skeleton, header and
- * gray-zone footer as the dashboard) with the docs sidebar variant and the
- * article content. It stays fully props-driven: public docs pages never
- * mount the Clerk-backed dashboard provider.
- */
 export function DocsShell({
   slug,
   categories,
@@ -93,7 +82,6 @@ export function DocsShell({
       sidebar={<DocsSidebar slug={slug} categories={categories} />}
       breadcrumb={breadcrumb}
     >
-      {/* Article Content Container */}
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-4xl mx-auto px-4 sm:px-8 py-6 sm:py-10 space-y-8">
           {!isAuthenticated && (
@@ -123,7 +111,6 @@ export function DocsShell({
 
           {children}
 
-          {/* Prev / Next Article Navigation Footer */}
           {(prevArticle || nextArticle) && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-8 mt-12 border-t border-border/60">
               {prevArticle ? (

@@ -79,7 +79,6 @@ export async function handleGetInvoice(
     throw new Error(`Рахунок ${invId} не знайдено.`);
   }
 
-  // Verify the session is allowed to touch this invoice's project
   await resolveTargetProject(invoice.project_id, scope, projectsRepo);
 
   return {
@@ -93,8 +92,6 @@ export async function handleListInvoices(
 ): Promise<CallToolResult> {
   const { projectId, status, limit = 20 } = args || {};
 
-  // `resolveTargetProject` doubles as the ownership check: it throws when the
-  // session is not allowed to touch the requested project.
   const targetProject = await resolveTargetProject(projectId, scope, projectsRepo);
 
   const invoices = await invoicesRepo.list({

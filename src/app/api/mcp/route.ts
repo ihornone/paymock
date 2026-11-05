@@ -21,16 +21,6 @@ import type { McpScope } from '@/features/mcp/handlers/projects.handler';
 import { checkRateLimit, getClientIp } from '@/server/rate-limit';
 import { logger } from '@/shared/logger';
 
-/**
- * CORS policy for the MCP endpoint.
- *
- * MCP clients are native/desktop processes, not browsers, and they authenticate
- * with an `X-Token` header — never with cookies. CORS is therefore a browser
- * access-control mechanism here, not an authentication control, and `*` is safe.
- *
- * When `MCP_ALLOWED_ORIGINS` is set the policy switches to an explicit
- * allow-list, which is the recommended configuration for browser-hosted clients.
- */
 const MCP_ALLOWED_ORIGINS = (process.env.MCP_ALLOWED_ORIGINS || '')
   .split(',')
   .map((origin) => origin.trim())
@@ -70,13 +60,6 @@ function buildCorsHeaders(req: NextRequest): Record<string, string> {
   };
 }
 
-/**
- * Reads the credential of the request.
- *
- * Only the header forms are accepted. A token in the query string ends up in
- * access logs and browser history, which is why `?token=` is no longer
- * supported.
- */
 function extractToken(req: NextRequest): string | null {
   const xToken = req.headers.get('x-token') || req.headers.get('X-Token');
   if (xToken && xToken.trim()) return xToken.trim();
@@ -96,13 +79,6 @@ export async function OPTIONS(req: NextRequest) {
   });
 }
 
-/**
- * The server manifest.
- *
- * It used to be served to anyone: the full tool catalogue, the protocol
- * version and a ready-to-paste client configuration. The manifest is now
- * behind the same credential as the rest of the endpoint.
- */
 export async function GET(req: NextRequest) {
   const origin = req.nextUrl.origin;
   const token = extractToken(req);
@@ -199,7 +175,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 0. NOTIFICATIONS (Per JSON-RPC 2.0 & MCP, notifications have no id or start with notifications/)
   if (
     method === 'notifications/initialized' ||
     (typeof method === 'string' && method.startsWith('notifications/')) ||
@@ -211,7 +186,6 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // 1. PING
   if (method === 'ping') {
     return NextResponse.json(
       { jsonrpc: '2.0', id, result: {} },
@@ -219,7 +193,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 2. SERVER DISCOVER (Modern MCP protocol probe)
   if (method === 'server/discover') {
     return NextResponse.json(
       {
@@ -237,7 +210,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 3. INITIALIZE
   if (method === 'initialize') {
     return NextResponse.json(
       {
@@ -260,17 +232,10 @@ export async function POST(req: NextRequest) {
   const invoicesRepo = new InvoicesRepository();
   const webhooksRepo = new WebhooksRepository();
 
-  // 4. RESOLVE THE SCOPE
-  //
-  // A **user token** (`pmk_usr_…`) or a Clerk session scopes the session to
-  // every project the user owns. A **project token** (`pmk_live_…`) scopes it
-  // to that single project.
   let scope: McpScope = { userId: null, projectId: null };
 
   if (rawToken) {
     if (isPersonalAccessToken(rawToken)) {
-      // A personal access token is only accepted when it exists and is not
-      // revoked — the prefix alone grants nothing.
       scope.userId = await verifyPersonalAccessToken(rawToken);
     } else {
       const foundProject = await findProjectByToken(rawToken, projectsRepo);
@@ -280,7 +245,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // A Clerk session scopes by account.
   if (!scope.userId && !scope.projectId) {
     const actor = await authenticateRequest(req);
     if (actor) {
@@ -288,7 +252,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // If no scope could be resolved, return 401.
   if (!scope.userId && !scope.projectId) {
     await recordAudit({
       actorUserId: null,
@@ -321,12 +284,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 5. TOOLS/CALL
   if (method === 'tools/call') {
     const toolName = params?.name;
     const args = params?.arguments || {};
 
-    // Mutating tools are limited harder than the read path.
     const MUTATING_TOOLS = new Set([
       'create_project',
       'create_invoice',
@@ -424,7 +385,6 @@ export async function POST(req: NextRequest) {
           id,
           error: {
             code: isScopeError ? -32002 : -32603,
-            // A scope violation must not reveal whether the project exists.
             message: isScopeError ? SCOPE_ERROR_MESSAGE : err.message || String(err),
           },
         },
@@ -433,7 +393,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // 6. RESOURCES/LIST
   if (method === 'resources/list') {
     const ownedProjects = await listAccessibleProjects(scope, projectsRepo);
     const resources = [
@@ -466,7 +425,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 7. RESOURCES/READ
   if (method === 'resources/read') {
     const uri = params?.uri;
     if (!uri || typeof uri !== 'string') {
@@ -503,7 +461,6 @@ export async function POST(req: NextRequest) {
     };
 
     if (uri === 'paymock://projects') {
-      // Only the caller's own projects — and never their tokens.
       const ownedProjects = await listAccessibleProjects(scope, projectsRepo);
 
       await recordAudit({
@@ -556,8 +513,6 @@ export async function POST(req: NextRequest) {
       const projectId = (statsMatch ?? recentInvoicesMatch)![1];
 
       try {
-        // The same guard the tools use — resources are not a second,
-        // weaker door into the data.
         const project = await assertProjectAccess(scope, projectId, projectsRepo);
 
         const payload = statsMatch
@@ -609,7 +564,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 8. PROMPTS/LIST
   if (method === 'prompts/list') {
     return NextResponse.json(
       { jsonrpc: '2.0', id, result: { prompts: [] } },
@@ -617,7 +571,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 9. UNKNOWN METHOD
   return NextResponse.json(
     { jsonrpc: '2.0', error: { code: -32601, message: `Method not found: ${method}` }, id: id ?? null },
     { status: 200, headers: corsHeaders }

@@ -1,11 +1,3 @@
-/**
- * Identifier generation.
- *
- * All random identifiers use `crypto.getRandomValues` — `Math.random()` is not
- * a CSPRNG and previously produced the merchant `X-Token` credential from only
- * ~36 bits of entropy.
- */
-
 const ID_ALPHABET = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 const TOKEN_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
 
@@ -25,7 +17,6 @@ export function randomString(alphabet: string, length: number): string {
 }
 
 export function generateInvoiceId(): string {
-  // p2_... acquiring invoice ID
   return `p2_${randomString(ID_ALPHABET, INVOICE_ID_LENGTH)}`;
 }
 

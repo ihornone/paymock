@@ -24,12 +24,6 @@ interface DashboardContextType {
   handleUpdateProjectSettings: (id: string, settings: Partial<Project>) => Promise<boolean>;
   handleDeleteProject: (id: string, name: string) => Promise<boolean>;
   handleResetToken: (projectId: string) => Promise<string | null>;
-  /**
-   * Credentials issued by the last create/rotate call.
-   *
-   * The server stores only their hashes, so they are available here exactly
-   * once — the UI shows them and then drops them.
-   */
   issuedCredentials: IssuedCredentials | null;
   clearIssuedCredentials: () => void;
   copiedKey: string | null;
@@ -49,7 +43,6 @@ export interface IssuedCredentials {
 
 const DashboardContext = React.createContext<DashboardContextType | null>(null);
 
-// In-memory module cache to eliminate tab-switching delay & screen flicker
 interface GlobalCache {
   userId: string;
   projects: Project[];
@@ -95,15 +88,11 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   const [copiedKey, setCopiedKey] = React.useState<string | null>(null);
   const [issuedCredentials, setIssuedCredentials] = React.useState<IssuedCredentials | null>(null);
 
-  // The Clerk session cookie authenticates the request in production.
-  // `x-user-id` is only honoured outside production and keeps local
-  // development working without a Clerk session.
   const authHeaders = React.useMemo<Record<string, string>>(() => {
     return user?.id ? { 'x-user-id': user.id } : ({} as Record<string, string>);
   }, [user?.id]);
 
   const fetchData = React.useCallback(async () => {
-    // If Clerk is loaded and user is not signed in, reset everything
     if (isLoaded && !isSignedIn) {
       memoryCache = null;
       setProjects([]);
@@ -123,7 +112,6 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     if (!isLoaded) return;
 
     try {
-      // Only show full loading spinner if we have no cached data at all
       if (!memoryCache || memoryCache.userId !== currentUserId) {
         setLoading(true);
       }
@@ -139,7 +127,6 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       setWebhookLogs(nextWebhooks);
       setStats(nextStats);
 
-      // Update memory cache
       if (currentUserId) {
         memoryCache = {
           userId: currentUserId,
@@ -151,7 +138,6 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         };
       }
     } catch (err) {
-      // 4xx are expected rejections (not a crash); only 5xx is worth a console error.
       if (err instanceof ApiError && err.isExpectedRejection) {
         console.info('Dashboard request rejected:', err.code || err.kind);
       } else {
@@ -166,27 +152,6 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     fetchData();
   }, [fetchData]);
 
-  // ---- Live updates -------------------------------------------------------
-  //
-  // A payment happens in the checkout tab or through the API/MCP surface —
-  // never inside the dashboard tab itself. Instead of asking the merchant to
-  // reload the page, the provider polls a cheap revision probe (two aggregate
-  // queries) and refetches the full dashboard only when the revision moves.
-  //
-  // Polling skips hidden tabs, and returning to the tab checks the revision
-  // immediately — the dashboard is current the moment the merchant looks at
-  // it, with at most one interval of delay otherwise.
-
-  /**
-   * Poll cadence with adaptive backoff.
-   *
-   * A probe costs two COUNT/MAX aggregates on indexed columns plus a Worker
-   * invocation, so a dashboard that just sits open must not tick at a fixed
-   * rate. The cadence starts fast enough for a payment to land within seconds
-   * of an active burst and relaxes towards the 30 s ceiling while nothing
-   * changes; any change, or the merchant returning to the tab, snaps it back
-   * to the base interval. Hidden tabs do not probe at all.
-   */
   const REVISION_POLL_BASE_MS = 10_000;
   const REVISION_POLL_MAX_MS = 30_000;
   const REVISION_POLL_BACKOFF = 1.5;
@@ -195,8 +160,6 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   const probeInFlightRef = React.useRef(false);
   const pollDelayRef = React.useRef(REVISION_POLL_BASE_MS);
 
-  // The baseline is per project: switching projects must not compare against
-  // the previous project's revision.
   React.useEffect(() => {
     lastRevisionRef.current = null;
     pollDelayRef.current = REVISION_POLL_BASE_MS;
@@ -213,19 +176,15 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         headers: authHeaders,
       });
 
-      // The first probe of a session/project only records the baseline.
       if (lastRevisionRef.current !== null && data.revision !== lastRevisionRef.current) {
         await fetchData();
       }
-      // Adjust the cadence: a moving revision means the merchant is active —
-      // stay fast; a still revision means the tab can relax.
       pollDelayRef.current =
         data.revision !== lastRevisionRef.current
           ? REVISION_POLL_BASE_MS
           : Math.min(pollDelayRef.current * REVISION_POLL_BACKOFF, REVISION_POLL_MAX_MS);
       lastRevisionRef.current = data.revision;
     } catch {
-      // A failed probe is expected (offline, throttled) — the next tick retries.
     } finally {
       probeInFlightRef.current = false;
     }
@@ -245,7 +204,6 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
 
     const onVisibility = () => {
       if (document.visibilityState === 'visible') {
-        // The dashboard is current the moment the merchant looks at it.
         pollDelayRef.current = REVISION_POLL_BASE_MS;
         if (timer) clearTimeout(timer);
         scheduleNext();
@@ -278,13 +236,10 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     try {
       const newProj = await projectsApi.createProject({ name: name.trim() }, { headers: authHeaders });
       setIsCreateOpen(false);
-      // Invalidate cache and refetch
       memoryCache = null;
       await fetchData();
       if (newProj?.project?.id) {
         setSelectedProjectId(newProj.project.id);
-        // The token and the webhook secret are shown exactly once — the
-        // server keeps only their hashes.
         setIssuedCredentials({
           projectId: newProj.project.id,
           projectName: newProj.project.name,
@@ -369,7 +324,6 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       const data = await projectsApi.resetToken(projectId, { headers: authHeaders });
       memoryCache = null;
       await fetchData();
-      // The rotated token is returned once, like the one from a creation.
       setIssuedCredentials({
         projectId: data.project?.id || projectId,
         projectName: data.project?.name || '',

@@ -23,13 +23,6 @@ export interface CreateInvoiceDTO {
   validity?: number;
 }
 
-/**
- * Columns the dashboard actually renders. Reading the full 22-column row pulls
- * `basket_json`, `payment_info_json` and `cancel_list_json` over the wire for
- * nothing — measured at 69% dead weight in the response payload.
- *
- * Aliases keep the public API response shape (snake_case) unchanged.
- */
 export const DASHBOARD_INVOICE_COLUMNS = {
   id: invoices.id,
   project_id: invoices.project_id,
@@ -54,7 +47,6 @@ export type DashboardInvoice = {
   created_date: string;
 };
 
-
 export class InvoicesRepository {
   async findById(id: string): Promise<InvoiceRecord | null> {
     const db = await getDrizzle();
@@ -66,7 +58,6 @@ export class InvoicesRepository {
 
     if (!invoice) return null;
 
-    // Check if invoice has exceeded its validity (default 900s / 15 minutes)
     if (invoice.status === 'created' && invoice.created_date) {
       const validitySec = invoice.validity || 900;
       const createdAtMs = new Date(invoice.created_date).getTime();
@@ -125,9 +116,6 @@ export class InvoicesRepository {
     return results as InvoiceRecord[];
   }
 
-  /**
-   * Narrow projection for the dashboard feed. Same rows, 9 columns instead of 22.
-   */
   async listForDashboard(
     projectId: string,
     limit: number
@@ -185,10 +173,6 @@ export class InvoicesRepository {
       paymentInfo?: PaymentInfo;
       cancelItem?: CancelItem;
     } = {},
-    /**
-     * The row the caller already loaded. Supplying it removes a redundant
-     * full-row SELECT from every status transition.
-     */
     existing?: InvoiceRecord | null
   ): Promise<InvoiceRecord | null> {
     const db = await getDrizzle();
@@ -283,13 +267,6 @@ export class InvoicesRepository {
     };
   }
 
-  /**
-   * Aggregate statistics scoped to the owning user.
-   *
-   * The ownership check lives in the JOIN rather than in a separate
-   * `findById` call, so the whole read costs one query instead of two.
-   * Returns `null` when the user does not own the project.
-   */
   async countStatsForUser(
     projectId: string,
     userId: string
@@ -306,8 +283,6 @@ export class InvoicesRepository {
       .where(and(eq(invoices.project_id, projectId), eq(projects.user_id, userId)))
       .groupBy(invoices.status);
 
-    // No rows can mean "no invoices" or "not your project" — distinguish with a
-    // cheap ownership probe only in the empty case.
     if (rows.length === 0) {
       const owned = await db
         .select({ id: projects.id })
@@ -347,10 +322,6 @@ export class InvoicesRepository {
     };
   }
 
-  /**
-   * Most recent invoices of a project, scoped to the owning user in a single
-   * JOIN query.
-   */
   async listRecentForUser(
     projectId: string,
     userId: string,
@@ -378,13 +349,6 @@ export class InvoicesRepository {
     return rows.map((row) => row.invoice) as InvoiceRecord[];
   }
 
-  /**
-   * Change fingerprint of a project's invoices: row count plus the newest
-   * `modified_date`. Every status transition (payment, cancellation, expiry)
-   * bumps `modified_date`, and an insert changes both — so the pair moves on
-   * any dashboard-relevant write, while the read costs one aggregate query
-   * instead of re-listing rows.
-   */
   async getRevision(projectId: string): Promise<{ count: number; maxModified: string | null }> {
     const db = await getDrizzle();
 

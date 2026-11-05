@@ -24,7 +24,6 @@ export async function handleSimulatePayment(
     throw new Error(`Рахунок ${invoiceId} не знайдено.`);
   }
 
-  // Verify the session is allowed to touch this invoice's project
   await resolveTargetProject(invoice.project_id, scope, projectsRepo);
 
   let newStatus: any = 'created';
@@ -60,7 +59,6 @@ export async function handleSimulatePayment(
 
   let webhookStatusText = 'вебхук не налаштовано';
   if (updated && updated.webhook_url) {
-    // `sendWebhook` returns the delivery log it just wrote — no read-back needed.
     const log = await sendWebhook(updated);
     webhookStatusText = `надіслано на ${updated.webhook_url} (HTTP ${log.status_code || 'Err'}, ${log.duration_ms ?? 0}ms)`;
   }
@@ -81,8 +79,6 @@ export async function handleGetWebhookLogs(
 ): Promise<CallToolResult> {
   const { projectId, invoiceId, limit = 15 } = args || {};
 
-  // `resolveTargetProject` doubles as the ownership check: it throws when the
-  // session is not allowed to touch the requested project.
   const targetProject = await resolveTargetProject(projectId, scope, projectsRepo);
 
   const logs = await webhooksRepo.list({
@@ -108,7 +104,6 @@ export async function handleRetryWebhook(
     throw new Error(`Рахунок ${invoiceId} не знайдено.`);
   }
 
-  // Verify the session is allowed to touch this invoice's project
   await resolveTargetProject(invoice.project_id, scope, projectsRepo);
 
   const targetUrl = customUrl || invoice.webhook_url;

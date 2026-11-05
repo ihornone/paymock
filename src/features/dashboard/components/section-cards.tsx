@@ -16,17 +16,16 @@ import { formatCurrencyAmount } from '@/shared/utils/cn';
 export function SectionCards() {
   const { stats } = useDashboard();
 
-  const successRate = stats.totalCount > 0 
-    ? Math.round((stats.successCount / stats.totalCount) * 100) 
+  const successRate = stats.totalCount > 0
+    ? Math.round((stats.successCount / stats.totalCount) * 100)
     : 0;
 
-  const failureRate = stats.totalCount > 0 
-    ? Math.round((stats.failureCount / stats.totalCount) * 100) 
+  const failureRate = stats.totalCount > 0
+    ? Math.round((stats.failureCount / stats.totalCount) * 100)
     : 0;
 
   return (
     <div className="*:data-[slot=card]:shadow-xs @xl/main:grid-cols-2 @5xl/main:grid-cols-4 grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:bg-card dark:*:data-[slot=card]:bg-card lg:px-6">
-      {/* 1. Total Turnover */}
       <Card className="@container/card relative overflow-hidden border-border/60 bg-card">
         <CardHeader className="relative pb-2">
           <CardDescription className="text-xs font-medium">Успішний обіг</CardDescription>
@@ -51,7 +50,6 @@ export function SectionCards() {
         </CardFooter>
       </Card>
 
-      {/* 2. Total Invoices */}
       <Card className="@container/card relative overflow-hidden border-border/60 bg-card">
         <CardHeader className="relative pb-2">
           <CardDescription className="text-xs font-medium">Всього рахунків</CardDescription>
@@ -75,7 +73,6 @@ export function SectionCards() {
         </CardFooter>
       </Card>
 
-      {/* 3. Conversion / Success Rate */}
       <Card className="@container/card relative overflow-hidden border-border/60 bg-card">
         <CardHeader className="relative pb-2">
           <CardDescription className="text-xs font-medium">Конверсія платежів</CardDescription>
@@ -99,7 +96,6 @@ export function SectionCards() {
         </CardFooter>
       </Card>
 
-      {/* 4. Failed / Expired */}
       <Card className="@container/card relative overflow-hidden border-border/60 bg-card">
         <CardHeader className="relative pb-2">
           <CardDescription className="text-xs font-medium">Відхилені / Expired</CardDescription>

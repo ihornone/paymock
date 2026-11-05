@@ -1,108 +1,32 @@
 #!/usr/bin/env tsx
-/**
- * SQL injection linter.
- *
- * The audit rule this script enforces is blunt on purpose:
- *
- *   > No string interpolation in SQL. Only `?` placeholders — or the Drizzle
- *   > query builder — may produce a statement.
- *
- * Concatenating a value into a statement turns a data value into code. The
- * classic defence (parameterisation) is easy to apply and easy to lose: one
- * `+` in a query builder and the parameterisation is gone, and the review
- * diff that introduced it looks like a harmless refactor.
- *
- * So the rule is enforced mechanically in CI instead of being re-argued in
- * every pull request.
- *
- * What is flagged:
- *   SQL_TEMPLATE   a template literal that looks like SQL and interpolates a value
- *   SQL_TAG        a `sql` tagged template with an interpolation
- *   SQL_RAW        a `sql.raw` template — parameterisation is impossible there
- *   SQL_PREPARE    `.prepare(...)` with anything but a plain string literal
- *   SQL_EXEC       `.exec(...)` / `.execute(...)` with a non-literal argument
- *   SQL_CONCAT     a SQL string literal glued to another value with `+`
- *
- * How false positives are handled:
- *   - comments are stripped before the analysis, so a commented-out query is
- *     not a finding;
- *   - test files and the Drizzle schema are excluded;
- *   - a bare identifier that is explicitly allowed (a sort column, for
- *     example) may be interpolated — see ALLOWED_IDENTIFIERS;
- *   - anything else can be whitelisted per file/line with a written
- *     justification — see WHITELIST.
- *
- * Usage:
- *   pnpm run lint:sql            # report violations, exit 1 when there are any
- *   pnpm run lint:sql -- --verbose   # also print what was allowed and why
- */
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-/* ------------------------------------------------------------------ *
- * Configuration
- * ------------------------------------------------------------------ */
-
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 
-/** The repository root — one level above `scripts/`. */
 const REPO_ROOT = resolve(SCRIPT_DIR, '..');
 
-/** Directories that are scanned. */
 const SCAN_ROOTS = ['src', 'scripts'];
 
-/** File extensions that can contain SQL. */
 const SCAN_EXTENSIONS = ['.ts', '.tsx'];
 
-/**
- * Paths that are never scanned, with the reason.
- *
- * - Test files assert on query shapes; a fixture query is not a production
- *   injection.
- * - `schema.ts` *defines* the tables — the column names are the schema, not
- *   an interpolated statement.
- * - This file contains the detection patterns themselves; scanning it would
- *   report the linter's own regular expressions.
- */
 const EXCLUDED_PATHS: Array<{ path: string; reason: string }> = [
   { path: 'tests/', reason: 'test fixtures and assertions are not production SQL' },
   { path: 'src/server/db/schema.ts', reason: 'table definitions, not executable statements' },
   { path: 'scripts/lint-sql.ts', reason: 'the linter itself contains SQL detection patterns' },
 ];
 
-/**
- * Identifiers that may be interpolated into a statement.
- *
- * The value of such an identifier must be validated against a fixed
- * allow-list *at the call site* — the linter cannot prove that, so each entry
- * names the guard that is expected to exist.
- */
 const ALLOWED_IDENTIFIERS: Record<string, string> = {
-  // Example — uncomment only when a real allow-list guard exists next to it:
-  // sortColumn: 'validated against ALLOWED_SORT_COLUMNS before interpolation',
 };
 
-/**
- * Explicit, file-scoped exceptions.
- *
- * Every entry needs a `reason`: an unexplained exception is how a linter
- * rots into a no-op.
- */
 const WHITELIST: Array<{
-  /** Repo-relative path, or a directory prefix ending with `/`. */
   path: string;
-  /** Optional 1-based line number the exception applies to. */
   line?: number;
-  /** Optional regex the code snippet must match. */
   pattern?: RegExp;
   reason: string;
 }> = [
-  // The two entries below are the only interpolated statements in the
-  // repository, and both are safe for the same reason: SQLite cannot bind an
-  // identifier, so the table name (or the shape of the placeholder list) has
-  // to be part of the statement text.
   {
     path: 'scripts/migrate-security.ts',
     pattern: /SELECT \* FROM \$\{table\}/,
@@ -116,48 +40,24 @@ const WHITELIST: Array<{
       'only the number of "?" placeholders is interpolated (the ids.map(() => "?") chain); the id values themselves are bound as query parameters',
   },
 
-  // Example — a statement whose only interpolated value is an identifier
-  // validated against an allow-list:
-  // {
-  //   path: 'src/server/db/legacy.repository.ts',
-  //   pattern: /ORDER BY \$\{sortColumn\}/,
-  //   reason: 'sortColumn is checked against ALLOWED_SORT_COLUMNS on line 42',
-  // },
 ];
-
-/* ------------------------------------------------------------------ *
- * Scanning
- * ------------------------------------------------------------------ */
 
 type StringKind = 'single' | 'double' | 'template';
 
 interface StringSpan {
-  /** Index of the opening quote. */
   start: number;
-  /** Index just after the closing quote. */
   end: number;
   kind: StringKind;
-  /** Literal text of the string (templates keep `${…}` markers). */
   text: string;
-  /** The `${…}` expressions of a template literal. */
   interpolations: Array<{ start: number; end: number; expression: string }>;
 }
 
 interface ScanResult {
-  /** Comments blanked out, string contents kept — used for text matching. */
   content: string;
-  /** Comments and string contents blanked out — used for bracket matching. */
   structure: string;
   spans: StringSpan[];
 }
 
-/**
- * True when a `/` at `index` starts a regular expression literal rather
- * than a division.
- *
- * Without this, a regex like /['"]/ would open a "string" and desynchronise
- * the whole scan.
- */
 function isRegexStart(source: string, index: number): boolean {
   let i = index - 1;
   while (i >= 0 && /\s/.test(source[i])) i -= 1;
@@ -166,7 +66,6 @@ function isRegexStart(source: string, index: number): boolean {
   const prev = source[i];
   if ('(,=:[!&|?{};'.includes(prev)) return true;
 
-  // A keyword in front of the slash means an expression, not a division.
   const wordMatch = source.slice(0, i + 1).match(/([A-Za-z_$][\w$]*)$/);
   if (wordMatch) {
     const word = wordMatch[1];
@@ -194,14 +93,6 @@ function isRegexStart(source: string, index: number): boolean {
   return false;
 }
 
-/**
- * Splits a source file into code, strings and comments.
- *
- * The scanner is hand-written rather than regex-based because the analysis
- * needs to know *which* characters are inside a string: a `'` inside a
- * comment must not start a string, and a `)` inside a string must not close
- * a call.
- */
 function scan(source: string): ScanResult {
   const content = source.split('');
   const structure = source.split('');
@@ -220,7 +111,6 @@ function scan(source: string): ScanResult {
     const ch = source[i];
     const next = i + 1 < n ? source[i + 1] : '';
 
-    // Line comment.
     if (ch === '/' && next === '/') {
       while (i < n && source[i] !== '\n') {
         blank(i, true);
@@ -229,7 +119,6 @@ function scan(source: string): ScanResult {
       continue;
     }
 
-    // Block comment.
     if (ch === '/' && next === '*') {
       blank(i, true);
       blank(i + 1, true);
@@ -247,7 +136,6 @@ function scan(source: string): ScanResult {
       continue;
     }
 
-    // Regex literal — skipped as a unit so quotes inside it are harmless.
     if (ch === '/' && isRegexStart(source, i)) {
       let j = i + 1;
       let inClass = false;
@@ -275,7 +163,6 @@ function scan(source: string): ScanResult {
       continue;
     }
 
-    // String or template literal.
     if (ch === '"' || ch === "'" || ch === '`') {
       const kind: StringKind = ch === '`' ? 'template' : ch === '"' ? 'double' : 'single';
       const start = i;
@@ -311,7 +198,6 @@ function scan(source: string): ScanResult {
           while (j < n && depth > 0) {
             const ec = source[j];
             if (ec === '"' || ec === "'" || ec === '`') {
-              // Skip a nested string so its braces do not confuse the depth count.
               const quote = ec;
               j += 1;
               while (j < n) {
@@ -346,8 +232,6 @@ function scan(source: string): ScanResult {
 
       spans.push({ start, end: i, kind, text, interpolations });
 
-      // Keep the text in `content` (it may be SQL) but blank it in
-      // `structure` (brackets inside a string must not affect nesting).
       for (let k = start; k < i; k += 1) {
         if (source[k] === '\n') continue;
         structure[k] = ' ';
@@ -363,17 +247,6 @@ function scan(source: string): ScanResult {
   return { content: content.join(''), structure: structure.join(''), spans };
 }
 
-/* ------------------------------------------------------------------ *
- * Rules
- * ------------------------------------------------------------------ */
-
-/**
- * Patterns that identify a statement as SQL.
- *
- * They are deliberately narrow: a bare "DELETE" (an HTTP method in a route
- * table, for instance) must not look like SQL, so every pattern pairs a
- * keyword with the token that follows it in real statements.
- */
 const SQL_PATTERNS: RegExp[] = [
   /\bSELECT\b[\s\S]{0,400}?\bFROM\s+[\w"(`$]/i,
   /\bINSERT\s+INTO\b/i,
@@ -390,21 +263,10 @@ function looksLikeSql(text: string): boolean {
   return SQL_PATTERNS.some((pattern) => pattern.test(text));
 }
 
-/**
- * A bare identifier such as `sortColumn` — no member access, no call, no
- * property access.
- */
 function isBareIdentifier(expression: string): boolean {
   return /^[A-Za-z_$][\w$]*$/.test(expression.trim());
 }
 
-/**
- * The token that precedes a template literal, e.g. `sql` or `sql.raw`.
- *
- * The opening parenthesis of the call is stripped first: the tag of
- * `sql.raw(\`…\`)` is followed by `(`, so a naive "last identifier" match
- * would miss it.
- */
 function precedingTag(content: string, index: number): { tag: string; text: string } {
   const before = content.slice(0, index).replace(/\(\s*$/, '');
   const match = before.match(/([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*$/);
@@ -426,15 +288,11 @@ interface Violation {
   rule: RuleId;
   message: string;
   snippet: string;
-  /** Set when the finding was allowed by an explicit rule. */
   allowedBy?: string;
 }
 
 const SQL_KEYWORDS = /\b(?:SELECT|INSERT|UPDATE|DELETE|FROM|WHERE|JOIN|ORDER\s+BY|LIMIT|OFFSET|VALUES|SET)\b/i;
 
-/**
- * Analyses one file and returns its violations.
- */
 function analyseFile(absolutePath: string, relativePath: string): Violation[] {
   const source = readFileSync(absolutePath, 'utf-8');
   const { content, structure, spans } = scan(source);
@@ -477,8 +335,6 @@ function analyseFile(absolutePath: string, relativePath: string): Violation[] {
     });
   };
 
-  /* --- Rule: template literals ------------------------------------- */
-
   for (const span of spans) {
     if (span.kind !== 'template') continue;
     if (span.interpolations.length === 0) continue;
@@ -505,7 +361,6 @@ function analyseFile(absolutePath: string, relativePath: string): Violation[] {
 
     if (!looksLikeSql(span.text)) continue;
 
-    // Every interpolated expression is an explicitly allowed identifier?
     const allAllowed =
       span.interpolations.length > 0 &&
       span.interpolations.every(
@@ -532,8 +387,6 @@ function analyseFile(absolutePath: string, relativePath: string): Violation[] {
     );
   }
 
-  /* --- Rules: .prepare() / .exec() / .execute() --------------------- */
-
   const callPattern = /\.([A-Za-z_$][\w$]*)\s*\(/g;
   const interestingCalls = new Set(['prepare', 'exec', 'execute']);
 
@@ -544,7 +397,6 @@ function analyseFile(absolutePath: string, relativePath: string): Violation[] {
 
     const openParen = callMatch.index + callMatch[0].length - 1;
 
-    // Find the matching close paren in the structure-only view.
     let depth = 0;
     let closeParen = -1;
     for (let i = openParen; i < structure.length; i += 1) {
@@ -565,8 +417,6 @@ function analyseFile(absolutePath: string, relativePath: string): Violation[] {
 
     if (trimmed.length === 0) continue;
 
-    // A single plain string literal (no template, no concatenation) is the
-    // only shape this rule accepts.
     const argSpan = spans.find(
       (span) =>
         span.start >= argStart &&
@@ -579,11 +429,9 @@ function analyseFile(absolutePath: string, relativePath: string): Violation[] {
     }
 
     if (argSpan && argSpan.kind === 'template') {
-      // Already reported by the template rule unless it is a `sql` tag.
       continue;
     }
 
-    // A bare identifier that is explicitly allowed?
     if (isBareIdentifier(trimmed) && trimmed in ALLOWED_IDENTIFIERS) {
       push(
         argStart,
@@ -602,15 +450,11 @@ function analyseFile(absolutePath: string, relativePath: string): Violation[] {
     push(argStart, rule, `\`${method}()\` receives a non-literal statement: ${reason}`);
   }
 
-  /* --- Rule: SQL string concatenated with `+` ------------------------ */
-
   for (const span of spans) {
     const after = content.slice(span.end);
     const plusMatch = after.match(/^\s*\+/);
     if (!plusMatch) continue;
 
-    // The literal must actually look like SQL — otherwise it is a normal
-    // string concatenation.
     if (!looksLikeSql(span.text)) continue;
     if (!SQL_KEYWORDS.test(span.text)) continue;
 
@@ -619,10 +463,6 @@ function analyseFile(absolutePath: string, relativePath: string): Violation[] {
 
   return violations;
 }
-
-/* ------------------------------------------------------------------ *
- * Whitelisting
- * ------------------------------------------------------------------ */
 
 function isExcluded(relativePath: string): { excluded: boolean; reason?: string } {
   for (const entry of EXCLUDED_PATHS) {
@@ -653,10 +493,6 @@ function whitelistReason(violation: Violation): string | undefined {
   return undefined;
 }
 
-/* ------------------------------------------------------------------ *
- * File discovery
- * ------------------------------------------------------------------ */
-
 function collectFiles(): string[] {
   const files: string[] = [];
 
@@ -678,7 +514,6 @@ function collectFiles(): string[] {
       }
 
       if (stats.isDirectory()) {
-        // `node_modules` and build output never contain hand-written SQL.
         if (entry === 'node_modules' || entry === '.next' || entry === '.open-next') continue;
         walk(absolute);
         continue;
@@ -696,10 +531,6 @@ function collectFiles(): string[] {
 
   return files;
 }
-
-/* ------------------------------------------------------------------ *
- * Entry point
- * ------------------------------------------------------------------ */
 
 function main(): void {
   const verbose = process.argv.includes('--verbose') || process.argv.includes('-v');

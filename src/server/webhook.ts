@@ -7,28 +7,12 @@ import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { hmacSha256Hex } from '@/server/auth/project-token';
 import type { InvoiceRecord, WebhookLogRecord } from '@/shared/types/models';
 
-/**
- * The maximum size of the body Paymock sends.
- *
- * A merchant webhook payload is small by construction; a payload above this
- * limit is a sign of a malformed invoice rather than a legitimate delivery.
- */
 export const MAX_WEBHOOK_BODY_BYTES = 64 * 1024;
 
-/**
- * The maximum size of the response body that is read from the receiver.
- *
- * Without a cap a hostile (or broken) endpoint could stream an arbitrary
- * amount of data into the isolate's memory.
- */
 export const MAX_WEBHOOK_RESPONSE_BYTES = 8 * 1024;
 
-/** The maximum number of redirects that are followed. */
 export const MAX_WEBHOOK_REDIRECTS = 1;
 
-/**
- * Reads at most `maxBytes` from a response body.
- */
 async function readBodyCapped(res: Response, maxBytes: number): Promise<string> {
   if (!res.body) return '';
 
@@ -55,8 +39,6 @@ async function readBodyCapped(res: Response, maxBytes: number): Promise<string> 
       total += value.length;
     }
   } finally {
-    // Cancel the stream so the connection is released instead of being
-    // drained in the background.
     await reader.cancel().catch(() => undefined);
   }
 
@@ -71,21 +53,16 @@ async function readBodyCapped(res: Response, maxBytes: number): Promise<string> 
   return truncated ? `${text}…[truncated]` : text;
 }
 
-/**
- * Validates whether a target URL is safe for webhook dispatching (SSRF protection).
- */
 export function isSafeWebhookUrl(inputUrl: string): boolean {
   try {
     const url = new URL(inputUrl);
 
-    // 1. Only allow HTTP and HTTPS
     if (url.protocol !== 'http:' && url.protocol !== 'https:') {
       return false;
     }
 
     const hostname = url.hostname.toLowerCase();
 
-    // 2. Disallow local and loopback addresses
     if (
       hostname === 'localhost' ||
       hostname === '127.0.0.1' ||
@@ -98,12 +75,10 @@ export function isSafeWebhookUrl(inputUrl: string): boolean {
       return false;
     }
 
-    // 3. Disallow cloud metadata IP (AWS, GCP, DigitalOcean, Cloudflare)
     if (hostname === '169.254.169.254' || hostname.startsWith('169.254.')) {
       return false;
     }
 
-    // 4. In production, disallow private IP ranges (RFC 1918)
     if (process.env.NODE_ENV === 'production') {
       if (hostname.startsWith('10.')) return false;
       if (hostname.startsWith('192.168.')) return false;
@@ -120,13 +95,6 @@ export function isSafeWebhookUrl(inputUrl: string): boolean {
   }
 }
 
-/**
- * Dispatches a webhook and records the delivery attempt.
- *
- * Returns the created log so callers can report the delivery result without
- * re-reading it from the database — the previous `Promise<void>` signature
- * forced every caller into an extra SELECT of `request_body` + `response_body`.
- */
 export async function sendWebhook(invoice: InvoiceRecord): Promise<WebhookLogRecord> {
   const webhooksRepo = new WebhooksRepository();
   const projectsRepo = new ProjectsRepository();
@@ -182,9 +150,6 @@ export async function sendWebhook(invoice: InvoiceRecord): Promise<WebhookLogRec
       });
     }
 
-    // The signing secret of the project. A webhook without a signature cannot
-    // be distinguished from a forgery by the receiver, so every delivery is
-    // signed with HMAC-SHA256 over the exact body that is sent.
     const webhookSecret = await projectsRepo.findWebhookSecret(invoice.project_id);
     const signature = webhookSecret
       ? await hmacSha256Hex(webhookSecret, requestBody)
@@ -205,9 +170,6 @@ export async function sendWebhook(invoice: InvoiceRecord): Promise<WebhookLogRec
         signal: AbortSignal.timeout(7000),
       });
 
-      // At most one redirect is followed, and the new target is validated
-      // against the SSRF filter again — a redirect is an attacker-controlled
-      // destination just like the original URL.
       let redirects = 0;
       while (
         res.status >= 300 &&
@@ -262,7 +224,6 @@ export async function sendWebhook(invoice: InvoiceRecord): Promise<WebhookLogRec
       errorMsg = err.name === 'TimeoutError' ? 'webhook request timed out (7s)' : err.message;
     }
   } else {
-    // Sandbox simulation: URL was not specified by merchant, log simulated delivery
     statusCode = 200;
     responseBody = JSON.stringify({
       status: 'ok',
@@ -296,19 +257,6 @@ export async function sendWebhook(invoice: InvoiceRecord): Promise<WebhookLogRec
   return log;
 }
 
-/**
- * Dispatches a webhook without blocking the response.
- *
- * On Cloudflare Workers a plain `sendWebhook(...)` without `await` is unsafe:
- * the isolate is frozen as soon as the response is returned, which silently
- * drops both the HTTP call and the `webhook_logs` INSERT. `waitUntil` keeps
- * the task alive past the response instead.
- *
- * `waitUntil` must be registered **synchronously** — the isolate is frozen
- * right after the response is sent, so an awaited lookup could land too late.
- * The synchronous context accessor is therefore used, with an awaited task as
- * the fallback for runtimes without an ExecutionContext (Node, tests).
- */
 export function dispatchWebhook(invoice: InvoiceRecord): void {
   const task = sendWebhook(invoice).catch((err: unknown) => {
     logger.error({
@@ -320,10 +268,6 @@ export function dispatchWebhook(invoice: InvoiceRecord): void {
 
   try {
     const context = getCloudflareContext({ async: false });
-    // OpenNext exposes the Workers ExecutionContext as `ctx.ctx`.
-    // `waitUntil` must be invoked as a method — extracting it into a variable
-    // loses the `this` binding and Workers rejects the call with
-    // "Illegal invocation".
     if (typeof context?.ctx?.waitUntil === 'function') {
       context.ctx.waitUntil(task);
       logger.info({ event: 'webhook_dispatched_deferred', invoiceId: invoice.id });

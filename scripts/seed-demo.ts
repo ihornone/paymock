@@ -1,18 +1,3 @@
-/**
- * Seeds the demo tenant.
- *
- * The demo token used to be hard-coded in `schema.sql`
- * (`pmk_demo_test1234567890abcdef`) — the same credential on every
- * installation, trivially guessable and readable in the repository. It is
- * generated here instead, stored as a hash, and printed exactly once.
- *
- * The demo tenant is a development convenience. In production it is switched
- * off with `ENABLE_DEMO_TENANT=false`.
- *
- * Usage:
- *   CLOUDFLARE_DATABASE_ID=<id> tsx scripts/seed-demo.ts
- */
-
 import { d1Query, getDatabaseId } from './d1-client';
 
 const DEMO_PROJECT_ID = 'pm_demo_store';

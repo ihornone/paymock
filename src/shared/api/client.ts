@@ -1,14 +1,5 @@
-/**
- * Centralized API client.
- *
- * Every browser-side call to the Paymock API goes through this module:
- * a single timeout, a single error taxonomy, and a single place where
- * credentials are attached. Components never call `fetch` directly.
- */
-
 export const API_TIMEOUT_MS = 20_000;
 
-/** Error taxonomy shared by every API call. */
 export type ApiErrorKind =
   | 'network'
   | 'timeout'
@@ -50,7 +41,6 @@ export class ApiError extends Error {
     Object.setPrototypeOf(this, new.target.prototype);
   }
 
-  /** 4xx rejections are expected — the UI shows a message, it is not a crash. */
   get isExpectedRejection(): boolean {
     return this.status >= 400 && this.status < 500;
   }
@@ -74,11 +64,6 @@ export interface ApiRequestOptions {
   timeoutMs?: number;
 }
 
-/**
- * Performs an API request and normalizes every failure into an `ApiError`.
- *
- * @throws {ApiError} for any non-2xx response, network failure or timeout.
- */
 export async function apiRequest<T>(
   path: string,
   options: ApiRequestOptions = {}
@@ -94,7 +79,6 @@ export async function apiRequest<T>(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
-  // Propagate the caller's cancellation into our controller.
   const onExternalAbort = () => controller.abort();
   signal?.addEventListener('abort', onExternalAbort, { once: true });
 

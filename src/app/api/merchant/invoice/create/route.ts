@@ -13,7 +13,6 @@ export async function POST(req: NextRequest) {
   const auth = await validateMerchantToken(req);
   if (auth instanceof NextResponse) return auth;
 
-  // Rate limit: 120 invoice creations per minute per project
   const clientIp = getClientIp(req);
   const rateLimit = checkRateLimit({
     key: `invoice_create:${auth.project.id}:${clientIp}`,
@@ -31,7 +30,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ errCode: 'BAD_REQUEST', errText: 'invalid json body' }, { status: 400 });
   }
 
-  // Server-side validation: the request body is untrusted input.
   const parsed = createInvoiceSchema.safeParse(rawBody);
   if (!parsed.success) {
     logger.info({
@@ -76,9 +74,6 @@ export async function POST(req: NextRequest) {
     body.merchantPaymInfo?.icon;
 
   if (merchantLogo && !auth.project.logo_url) {
-    // Automatically attach merchant logo to project if not set yet.
-    // The token cache is updated as well, otherwise the cached project would
-    // still report a NULL logo and this UPDATE would repeat on every request.
     const projectsRepo = new ProjectsRepository();
     const updated = await projectsRepo.update(auth.project.id, { logo_url: merchantLogo });
     if (updated) {
@@ -86,7 +81,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Normalize basket items so real images from icon, img, image or picture are captured
   const normalizedBasket = body.merchantPaymInfo?.basketOrder?.map((item) => {
     const itemImg = item.icon || item.img || item.image || item.picture || null;
     return {

@@ -1,11 +1,5 @@
 import type { InvoiceStatus, PaymentType } from './acquiring';
 
-/**
- * A project as it may leave the server.
- *
- * The merchant token is **not** part of this shape: it is shown once, when it
- * is created or rotated, and never again.
- */
 export interface Project {
   id: string;
   user_id: string;
@@ -19,12 +13,6 @@ export interface Project {
   updated_at: string;
 }
 
-/**
- * A project together with the credentials that exist only in plaintext.
- *
- * Returned by the calls that create or rotate a token; never persisted and
- * never re-sent.
- */
 export interface ProjectCredentials {
   project: Project;
   token: string;
@@ -79,7 +67,6 @@ export interface InvoiceStats {
 
 export interface CreateProjectDTO {
   name: string;
-  /** The owner. Mandatory — a project without an owner is unreachable. */
   userId: string;
   edrpou?: string;
   logoUrl?: string | null;

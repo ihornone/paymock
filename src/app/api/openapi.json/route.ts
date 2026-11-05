@@ -1,19 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-/**
- * The public OpenAPI document.
- *
- * Only the merchant surface is described here: it is the contract an
- * integrator actually needs, and it exposes no account-scoped endpoint. The
- * admin/account/MCP endpoints live in a separate, session-guarded document
- * (`/api/openapi.internal.json`) — listing them here would hand an anonymous
- * visitor a map of the internal API.
- *
- * The document is assembled from the local types below on purpose: importing
- * anything from `src/server/**` would pull the database and the auth layer
- * into a route that is served to the public.
- */
-
 type JsonSchema = Record<string, unknown>;
 
 type SecurityScheme = {
@@ -72,22 +58,8 @@ interface OpenApiDocument {
 
 const NO_STORE = { 'Cache-Control': 'private, no-store' } as const;
 
-/**
- * The merchant credential.
- *
- * It is declared as a security scheme (instead of a plain header parameter)
- * so that the generated clients attach it automatically and so that the
- * document states unambiguously which operations are protected.
- */
 const TOKEN_SECURITY: SecurityRequirement = { XToken: [] };
 
-/**
- * The token header, kept as an explicit parameter as well: some integrators
- * read the parameters section and never look at the security schemes.
- *
- * The value is a placeholder — a real project token must never end up in a
- * document that is served to anybody.
- */
 const TOKEN_HEADER_PARAM: OpenApiParameter = {
   name: 'X-Token',
   in: 'header',
@@ -293,11 +265,6 @@ export async function GET(req: NextRequest) {
         },
       },
 
-      /*
-       * The checkout surface is public by design: the URL is handed to the
-       * payer (it arrives in `pageUrl` of the invoice creation response) and
-       * must work without any merchant credential — the payer has none.
-       */
       '/pay/{invoiceId}': {
         get: {
           summary: 'Сторінка оплати рахунку',
@@ -389,8 +356,6 @@ export async function GET(req: NextRequest) {
         },
       },
     },
-    // The default for the whole document: every operation that does not
-    // override it needs the merchant token.
     security: [TOKEN_SECURITY],
   };
 

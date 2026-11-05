@@ -10,12 +10,6 @@ import { logger } from '@/shared/logger';
 
 const NO_STORE = { 'Cache-Control': 'private, no-store' } as const;
 
-/**
- * Personal access token management.
- *
- * The token value is returned exactly once — at creation time. Only its
- * SHA-256 hash is stored, so the value cannot be recovered later.
- */
 export async function GET(req: NextRequest) {
   const guard = await guardAdminRead(req, 'account.tokens.list');
   if (!guard.ok) return guard.error;
@@ -44,7 +38,6 @@ export async function POST(req: NextRequest) {
       name = body.name.trim().slice(0, 64);
     }
   } catch {
-    // An empty body is fine — the default token name is used.
   }
 
   const created = await createPersonalAccessToken(actor.userId, name);
@@ -65,7 +58,6 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json(
     {
-      // Shown to the user once and never recoverable afterwards.
       token: created.token,
       id: created.id,
       name,

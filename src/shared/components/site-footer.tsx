@@ -2,11 +2,6 @@ import Link from 'next/link';
 
 import { SITE } from '@/shared/config/site';
 
-/**
- * Legal / contact footer — sits in the gray zone *below* the app frame and
- * stays visible on every screen of the shared shell (dashboard and docs
- * alike): the privacy policy must be reachable before a user ever signs in.
- */
 export function SiteFooter() {
   return (
     <footer className="shrink-0 px-4 py-3 sm:px-6">

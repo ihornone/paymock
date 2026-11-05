@@ -17,14 +17,6 @@ const EMPTY_STATS = {
 
 const NO_STORE = { 'Cache-Control': 'private, no-store' } as const;
 
-/**
- * The dashboard bootstrap payload.
- *
- * Every method on this route requires a session: an anonymous request is
- * rejected with 401 instead of being treated as "a user without projects".
- * The previous behaviour — 200 with an empty list for GET, no check at all
- * for POST — is what let anonymous requests write rows into the database.
- */
 export async function GET(req: NextRequest) {
   const guard = await guardAdminRead(req, 'project.list');
   if (!guard.ok) return guard.error;
@@ -37,7 +29,6 @@ export async function GET(req: NextRequest) {
 
   const projectId = req.nextUrl.searchParams.get('projectId');
 
-  // Strictly the projects of the authenticated account.
   const projects = await projectsRepo.listOwned(actor.userId);
 
   const currentProjectId =
@@ -60,9 +51,6 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // These three queries are independent of each other — they only depend on
-  // `currentProjectId`. Awaiting them serially cost 4 sequential round trips;
-  // `Promise.all` collapses them into one.
   const [invoices, webhooks, stats] = await Promise.all([
     invoicesRepo.listForDashboard(currentProjectId, DASHBOARD_INVOICE_LIMIT),
     webhooksRepo.listForDashboard(currentProjectId, DASHBOARD_WEBHOOK_LIMIT),
@@ -75,14 +63,6 @@ export async function GET(req: NextRequest) {
   );
 }
 
-/**
- * Creates a project.
- *
- * The owner is taken from the session and from nowhere else; the body is
- * validated against an allow-list (`name`, `edrpou`) and every other field
- * is discarded. The merchant token and the webhook secret are returned
- * exactly once — only their hashes are stored.
- */
 export async function POST(req: NextRequest) {
   const guard = await guardAdminMutation(req, {
     action: 'project.create',
@@ -112,7 +92,6 @@ export async function POST(req: NextRequest) {
   const projectsRepo = new ProjectsRepository();
   const created = await projectsRepo.create({
     name: body.name.trim(),
-    // The owner comes from the session — never from the request body.
     userId: actor.userId,
     edrpou: body.edrpou?.trim() || '12345678',
   });
@@ -133,8 +112,6 @@ export async function POST(req: NextRequest) {
     {
       ok: true,
       project: created.project,
-      // Shown once. Only the SHA-256 hash is stored, so the token cannot be
-      // recovered from the API afterwards — a lost token must be rotated.
       token: created.token,
       webhookSecret: created.webhookSecret,
     },
@@ -142,13 +119,7 @@ export async function POST(req: NextRequest) {
   );
 }
 
-/**
- * Updates a project. The ownership check is part of the WHERE clause of the
- * UPDATE, so a foreign project id cannot be modified.
- */
 export async function PATCH(req: NextRequest) {
-  // The session is checked *before* the body is read: without a session the
-  // request is refused with 401 regardless of what it carries.
   const guard = await guardAdminMutation(req, {
     action: 'project.update',
     targetType: 'project',
@@ -199,8 +170,6 @@ export async function PATCH(req: NextRequest) {
       detail: 'not owned by the actor',
     });
 
-    // 404, not 403: the existence of a foreign project is not the caller's
-    // business.
     return NextResponse.json(
       { error: 'Project not found' },
       { status: 404, headers: NO_STORE }
@@ -221,9 +190,6 @@ export async function PATCH(req: NextRequest) {
   return NextResponse.json(updatedProject, { headers: NO_STORE });
 }
 
-/**
- * Deletes a project. Ownership is checked in the WHERE clause of the DELETE.
- */
 export async function DELETE(req: NextRequest) {
   const id = req.nextUrl.searchParams.get('id');
   if (!id) {

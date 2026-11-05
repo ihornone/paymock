@@ -37,9 +37,6 @@ export function DashboardShell({ children, pageTitle }: DashboardShellProps) {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [isCredentialsOpen, setIsCredentialsOpen] = React.useState(false);
 
-  // The token and the webhook secret exist in plaintext exactly once — when
-  // the project is created or the token is rotated. They are shown here and
-  // dropped afterwards.
   React.useEffect(() => {
     if (issuedCredentials) setIsCredentialsOpen(true);
   }, [issuedCredentials]);
@@ -114,7 +111,6 @@ export function DashboardShell({ children, pageTitle }: DashboardShellProps) {
         )}
       </AppShellFrame>
 
-      {/* ==================== CREATE PROJECT MODAL ==================== */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
         <form onSubmit={onSubmitCreate}>
           <DialogHeader>
@@ -154,7 +150,6 @@ export function DashboardShell({ children, pageTitle }: DashboardShellProps) {
         </form>
       </Dialog>
 
-      {/* ==================== ISSUED CREDENTIALS (shown once) ==================== */}
       <Dialog
         open={isCredentialsOpen && !!issuedCredentials}
         onOpenChange={(open) => {
